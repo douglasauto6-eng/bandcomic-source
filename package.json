@@ -1,0 +1,7 @@
+{
+  "name": "bandcomic-custom-source",
+  "version": "1.0.0",
+  "description": "Custom manga source server for Bandcomic on Mi Band 9 Pro",
+  "main": "api/index.js",
+  "engines": { "node": ">=18" }
+}
