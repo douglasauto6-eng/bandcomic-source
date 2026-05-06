@@ -1,25 +1,145 @@
 [
+  
   {
-    "id": 1,
-    "title": "Praia",
+    "id": 4,
+    "title": "Prima",
     "tags": [
       "PDF"
     ],
-    "cover": "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/001.jpg",
+    "cover": "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/001.jpg",
     "pages": [
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/001.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/002.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/003.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/004.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/005.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/006.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/007.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/008.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/009.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/010.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/011.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/012.jpg",
-      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/praia/013.jpg"
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/001.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/002.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/003.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/004.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/005.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/006.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/007.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/008.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/009.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/010.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/011.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/012.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/013.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/014.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/prima/015.jpg"
+    ]
+  },
+  {
+    "id": 5,
+    "title": "Sakura",
+    "tags": [
+      "PDF"
+    ],
+    "cover": "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/001.jpg",
+    "pages": [
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/001.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/002.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/003.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/004.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/005.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/006.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/007.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/008.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/sakura/009.jpg"
+    ]
+  },
+  {
+    "id": 6,
+    "title": "G1",
+    "tags": [
+      "PDF"
+    ],
+    "cover": "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/001.jpg",
+    "pages": [
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/001.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/002.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/003.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/004.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/005.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/006.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/007.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/008.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/009.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/010.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/011.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/012.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/013.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/014.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/015.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/016.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/017.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/018.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/019.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/020.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/021.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/022.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/023.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/024.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/g1/025.jpg"
+    ]
+  },
+  {
+    "id": 7,
+    "title": "Tatuador",
+    "tags": [
+      "PDF"
+    ],
+    "cover": "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/001.jpg",
+    "pages": [
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/001.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/002.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/003.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/004.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/005.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/006.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/007.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/008.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/009.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/010.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/011.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/012.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/013.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/014.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/015.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/016.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/017.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/018.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/019.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/020.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/021.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/022.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/023.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/024.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/025.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tatuador/026.jpg"
+    ]
+  },
+  {
+    "id": 8,
+    "title": "Tufos",
+    "tags": [
+      "PDF"
+    ],
+    "cover": "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/001.jpg",
+    "pages": [
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/001.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/002.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/003.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/004.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/005.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/006.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/007.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/008.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/009.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/010.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/011.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/012.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/013.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/014.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/015.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/016.jpg",
+      "https://raw.githubusercontent.com/douglasauto6-eng/bandcomic-source/main/images/tufos/017.jpg"
     ]
   }
 ]
