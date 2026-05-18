@@ -261,4 +261,5 @@ bandcomic-source/
 | `GET /` | Status do servidor |
 
 Na busca, o texto pesquisado e comparado com titulo e tags. Tambem funcionam
-os prefixos `tag:` e `#`, por exemplo `/search/tag:PDF/1`.
+os prefixos `tag:` e `#`, por exemplo `/search/tag:PDF/1`. Se o texto for
+apenas numero, o servidor trata como busca exata por ID.

@@ -35,6 +35,10 @@ function isAllQuery(query) {
 function matchesSearch(comic, query) {
   if (isAllQuery(query)) return true;
 
+  if (/^\d+$/.test(query)) {
+    return comic.id === parseInt(query, 10);
+  }
+
   const tags = comicTags(comic).map(normalizeText);
   const tagMatch = query.match(/^(tag:|tags:|#)(.+)$/);
   if (tagMatch) {

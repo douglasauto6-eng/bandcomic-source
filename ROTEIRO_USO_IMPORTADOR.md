@@ -129,6 +129,11 @@ https://bandcomic-source.vercel.app/search/tag:PDF/1
 Se `/search/*/1` e `/search/tag:PDF/1` listarem os livros importados, a fonte
 esta pronta para a Redmi Watch 5.
 
+A busca direta por ID continua funcionando pelo fluxo nativo do Bandcomic:
+quando voce digita apenas numeros, o app chama `/comic/<id>` em vez de
+`/search`. O servidor tambem aceita `/search/1/1` como busca exata pelo ID 1
+para testes no navegador.
+
 ## 9. Testar na Redmi Watch 5
 
 No Bandcomic da pulseira/relogio:
