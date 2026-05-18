@@ -196,6 +196,33 @@ function matchesSearch(comic, query) {
   return title.includes(query) || tags.some(tag => tag.includes(query));
 }
 
+function sendAppSearch(res, base, catalog, rawQuery, rawPage, rawPageSize) {
+  const query = normalizeText(decodeURIComponent(rawQuery || '*'));
+  const pageNum = parseInt(rawPage, 10) || 1;
+  const pageSize = Math.min(parseInt(rawPageSize || '12', 10) || 12, 24);
+  const results = catalog.filter(c => matchesSearch(c, query));
+  const start = (pageNum - 1) * pageSize;
+  const slice = results.slice(start, start + pageSize);
+
+  sendJson(res, 200, {
+    ok: true,
+    query,
+    page: pageNum,
+    page_size: pageSize,
+    total: results.length,
+    has_more: results.length > start + pageSize,
+    results: slice.map(c => ({
+      id: c.id,
+      comic_id: c.id,
+      title: c.title,
+      cover_url: publicCoverUrl(base, c.cover),
+      page_count: Array.isArray(c.pages) ? c.pages.length : 0,
+      pages: Array.isArray(c.pages) ? c.pages.length : 0,
+      tags: comicTags(c),
+    })),
+  });
+}
+
 async function streamToText(stream) {
   return await new Response(stream).text();
 }
@@ -438,31 +465,21 @@ async function handleAppRoute(req, res, parsedUrl, pathname, base) {
 
   const catalog = await loadCatalog();
 
+  if (pathname === '/app/search' || pathname === '/app/search/') {
+    sendAppSearch(
+      res,
+      base,
+      catalog,
+      parsedUrl.searchParams.get('q') || parsedUrl.searchParams.get('text') || '*',
+      parsedUrl.searchParams.get('page') || '1',
+      parsedUrl.searchParams.get('pageSize') || '12',
+    );
+    return true;
+  }
+
   const searchMatch = pathname.match(/^\/app\/search\/([^/]+)\/(\d+)/);
   if (searchMatch) {
-    const query = normalizeText(decodeURIComponent(searchMatch[1]));
-    const pageNum = parseInt(searchMatch[2], 10) || 1;
-    const pageSize = Math.min(parseInt(parsedUrl.searchParams.get('pageSize') || '12', 10) || 12, 24);
-    const results = catalog.filter(c => matchesSearch(c, query));
-    const start = (pageNum - 1) * pageSize;
-    const slice = results.slice(start, start + pageSize);
-
-    sendJson(res, 200, {
-      ok: true,
-      page: pageNum,
-      page_size: pageSize,
-      total: results.length,
-      has_more: results.length > start + pageSize,
-      results: slice.map(c => ({
-        id: c.id,
-        comic_id: c.id,
-        title: c.title,
-        cover_url: publicCoverUrl(base, c.cover),
-        page_count: Array.isArray(c.pages) ? c.pages.length : 0,
-        pages: Array.isArray(c.pages) ? c.pages.length : 0,
-        tags: comicTags(c),
-      })),
-    });
+    sendAppSearch(res, base, catalog, searchMatch[1], searchMatch[2], parsedUrl.searchParams.get('pageSize'));
     return true;
   }
 
