@@ -20,6 +20,32 @@ function findById(id) {
   return catalog.find(c => c.id === parseInt(id));
 }
 
+function normalizeText(value) {
+  return String(value || '').toLowerCase().trim();
+}
+
+function comicTags(comic) {
+  return Array.isArray(comic.tags) ? comic.tags : ['PDF'];
+}
+
+function isAllQuery(query) {
+  return !query || query === '*' || query === 'all' || query === '%2a';
+}
+
+function matchesSearch(comic, query) {
+  if (isAllQuery(query)) return true;
+
+  const tags = comicTags(comic).map(normalizeText);
+  const tagMatch = query.match(/^(tag:|tags:|#)(.+)$/);
+  if (tagMatch) {
+    const wanted = normalizeText(tagMatch[2]);
+    return tags.some(tag => tag === wanted || tag.includes(wanted));
+  }
+
+  const title = normalizeText(comic.title);
+  return title.includes(query) || tags.some(tag => tag.includes(query));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler principal — roteador manual compatível com Vercel Serverless
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,14 +83,11 @@ module.exports = function handler(req, res) {
   // Spec: { page, has_more, results: [{comic_id, title, cover_url, pages}] }
   const searchMatch = url.match(/^\/search\/([^/]+)\/(\d+)/);
   if (searchMatch) {
-    const query    = decodeURIComponent(searchMatch[1]).toLowerCase().trim();
+    const query    = normalizeText(decodeURIComponent(searchMatch[1]));
     const pageNum  = parseInt(searchMatch[2]) || 1;
     const pageSize = 10;
 
-    let results = catalog;
-    if (query && query !== '*' && query !== 'all' && query !== '%2A') {
-      results = catalog.filter(c => c.title.toLowerCase().includes(query));
-    }
+    const results = catalog.filter(c => matchesSearch(c, query));
 
     const start   = (pageNum - 1) * pageSize;
     const slice   = results.slice(start, start + pageSize);

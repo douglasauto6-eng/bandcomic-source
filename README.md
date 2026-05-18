@@ -1,8 +1,15 @@
-# 📱 Bandcomic Custom Source — Mi Band 9 Pro
+# 📱 Bandcomic Custom Source — Mi Band 9 Pro / Redmi Watch 5
 
 Servidor de fonte personalizada para o app **腕上漫画 (Bandcomic)**.
 Segue estritamente a especificação oficial:
 https://github.com/sf-yuzifu/bandcomic/blob/main/docs/CUSTOM_SOURCE.md
+
+Nota sobre qualidade: a documentacao do autor recomenda que fontes suportem
+`width` e `quality` nas URLs das paginas, e tambem diz que o `User-Agent` pode
+ser usado para ajustar qualidade por dispositivo. Como este projeto serve
+imagens estaticas via `raw.githubusercontent.com`, esses parametros nao
+redimensionam a imagem no servidor; portanto a qualidade real vem do arquivo
+gerado pelo conversor.
 
 ---
 
@@ -48,8 +55,42 @@ sudo apt install poppler-utils
 
 ### ETAPA 2 — Converter seus PDFs em imagens
 
+#### Opcao A — aplicativo Windows
+
+Execute:
+```bash
+python bandcomic_importer_windows.py
+```
+
+Ou de dois cliques em:
+```text
+abrir_importador_windows.bat
+```
+
+No app, escolha:
+- **Adicionar PDFs** ou **Adicionar pasta**
+- Perfil **redmi-watch5** para melhor nitidez na Redmi Watch 5
+- Tags, por padrao `PDF, Bandcomic`
+- **Gerar images/ e catalog.json**
+
+O app usa o mesmo conversor abaixo e preserva a estrutura `images/` +
+`catalog.json`. Se o titulo ja existir, o conversor preserva o mesmo `id`
+no catalogo e apenas troca as imagens/URLs daquele item.
+
+Depois de subir o `catalog.json` no GitHub, a busca do servidor tambem procura
+nas tags. Exemplos na pulseira:
+
+```text
+PDF
+Bandcomic
+tag:PDF
+#Bandcomic
+```
+
+#### Opcao B — linha de comando
+
 1. Coloque seus PDFs em qualquer pasta
-2. Edite o arquivo `converter_pdf.py` e altere as linhas:
+2. Se necessario, edite no arquivo `converter_pdf_v3_1.py`:
    ```python
    GITHUB_USER   = "SEU_USUARIO"   # seu usuário do GitHub
    GITHUB_REPO   = "SEU_REPO"      # nome do repositório que você vai criar
@@ -57,13 +98,35 @@ sudo apt install poppler-utils
    ```
 3. Execute:
    ```bash
-   python converter_pdf.py meu_arquivo.pdf
+   python converter_pdf_v3_1.py meu_arquivo.pdf
    # ou converter vários de uma vez:
-   python converter_pdf.py pasta_com_pdfs/
+   python converter_pdf_v3_1.py pasta_com_pdfs/
    ```
 4. O script vai criar:
    - Pasta `images/nome-do-pdf/001.jpg`, `002.jpg`, etc.
    - Arquivo `catalog.json` atualizado automaticamente
+
+#### Perfis de qualidade
+
+```bash
+python converter_pdf_v3_1.py --profile redmi-watch5 meu_arquivo.pdf
+python converter_pdf_v3_1.py --profile miband9pro meu_arquivo.pdf
+python converter_pdf_v3_1.py --profile premium meu_arquivo.pdf
+python converter_pdf_v3_1.py --tags "PDF, Bandcomic, MinhaTag" meu_arquivo.pdf
+```
+
+| Perfil | Uso indicado | Paginas |
+|---|---|---|
+| `redmi-watch5` | Padrao atual, melhor zoom sem arquivos enormes | 840 px / q82 / dpi 180 |
+| `miband9pro` | Compatibilidade com o resultado antigo | 600 px / q70 / dpi 150 |
+| `premium` | Mais detalhe, maior consumo de armazenamento | 960 px / q84 / dpi 200 |
+
+As capas continuam separadas em `cover.jpg` com 120 px / q60, mantendo a
+recomendacao do autor de deixar `cover_url` abaixo de 200 px.
+
+O autor define `tags` no retorno de detalhe do comic. Este servidor usa o mesmo
+campo tambem como criterio de busca: se voce pesquisar uma tag, todos os livros
+com essa tag aparecem na lista.
 
 ---
 
@@ -155,7 +218,7 @@ Se no futuro quiser usar uma fonte que exige Cookie:
 
 1. Execute o converter:
    ```bash
-   python converter_pdf.py novo_arquivo.pdf
+   python converter_pdf_v3_1.py novo_arquivo.pdf
    ```
 2. Faça upload das novas imagens e do `catalog.json` atualizado para o GitHub
 3. O Vercel redeploya automaticamente em ~1 minuto
@@ -177,7 +240,9 @@ bandcomic-source/
 │   └── outro-pdf/
 │       └── ...
 ├── catalog.json          ← lista de comics e URLs das páginas
-├── converter_pdf.py      ← script local para converter PDFs
+├── converter_pdf_v3_1.py ← script local para converter PDFs/imagens
+├── bandcomic_importer_windows.py ← app Windows simples para importar
+├── abrir_importador_windows.bat ← atalho para abrir o app
 ├── package.json
 ├── vercel.json           ← roteamento Vercel
 └── README.md
@@ -194,3 +259,6 @@ bandcomic-source/
 | `GET /comic/<id>` | Detalhes de um comic |
 | `GET /photo/<id>/chapter/<capitulo>` | Imagens de um capítulo |
 | `GET /` | Status do servidor |
+
+Na busca, o texto pesquisado e comparado com titulo e tags. Tambem funcionam
+os prefixos `tag:` e `#`, por exemplo `/search/tag:PDF/1`.
