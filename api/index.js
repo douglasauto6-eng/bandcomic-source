@@ -103,7 +103,20 @@ function requireSourceAuth(req, res) {
 }
 
 function requireAdminAuth(req, res) {
-  return requireToken(req, res, ADMIN_TOKEN, 'admin');
+  const token = requestToken(req);
+  if (ADMIN_TOKEN && token === ADMIN_TOKEN) return true;
+  if (SOURCE_TOKEN && token === SOURCE_TOKEN) return true;
+
+  if (!ADMIN_TOKEN && !SOURCE_TOKEN) {
+    sendJson(res, 503, {
+      error: 'admin token is not configured',
+      hint: 'Set ADMIN_TOKEN or SOURCE_TOKEN in Vercel.',
+    });
+    return false;
+  }
+
+  sendJson(res, 401, { error: 'unauthorized' });
+  return false;
 }
 
 function isInternalPath(value) {
@@ -314,7 +327,17 @@ async function serveBlob(req, res, parsedUrl, blobPath, isCover, signedExp, sign
   res.statusCode = 200;
   res.setHeader('Content-Type', result.blob?.contentType || 'application/octet-stream');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Disposition', `inline; filename="${blobPath.split('/').pop() || 'image.jpg'}"`);
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (Number.isFinite(result.blob?.size)) {
+    res.setHeader('Content-Length', String(result.blob.size));
+  }
   res.setHeader('Cache-Control', isCover ? 'public, max-age=3600' : 'private, max-age=60');
+
+  if (req.method === 'HEAD') {
+    res.end();
+    return;
+  }
 
   const stream = result.stream;
   if (stream && typeof stream.pipe === 'function') {
@@ -324,9 +347,49 @@ async function serveBlob(req, res, parsedUrl, blobPath, isCover, signedExp, sign
   }
 }
 
+async function blobStatus(path) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN || !isInternalPath(path)) {
+    return { ok: false, statusCode: 0 };
+  }
+
+  try {
+    const { get } = await blobSdk();
+    const result = await get(path, { access: 'private' });
+    if (!result) return { ok: false, statusCode: 404 };
+    return {
+      ok: result.statusCode === 200,
+      statusCode: result.statusCode || 200,
+      contentType: result.blob?.contentType || null,
+      size: result.blob?.size ?? null,
+    };
+  } catch (error) {
+    return { ok: false, statusCode: 500, error: error.message };
+  }
+}
+
+async function debugComic(req, res, comicId) {
+  const catalog = await loadCatalog();
+  const comic = findById(catalog, comicId);
+  if (!comic) {
+    sendJson(res, 404, { error: 'not found', comics: catalog.length });
+    return;
+  }
+
+  const firstPage = Array.isArray(comic.pages) ? comic.pages[0] : '';
+  sendJson(res, 200, {
+    ok: true,
+    imageUrlMode: 'signed-path-v2',
+    supportsHead: true,
+    comics: catalog.length,
+    pageCount: Array.isArray(comic.pages) ? comic.pages.length : 0,
+    cover: await blobStatus(comic.cover),
+    firstPage: await blobStatus(firstPage),
+  });
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cookie, Authorization, X-Admin-Token, X-Source-Token');
 
   if (req.method === 'OPTIONS') {
@@ -349,7 +412,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
     sendJson(res, 405, { error: 'method not allowed' });
     return;
   }
@@ -380,6 +443,12 @@ module.exports = async function handler(req, res) {
       titles: catalog.map(c => c.title),
       docs: 'https://github.com/sf-yuzifu/bandcomic/blob/main/docs/CUSTOM_SOURCE.md',
     });
+    return;
+  }
+
+  const debugMatch = pathname.match(/^\/debug\/comic\/(\d+)$/);
+  if (debugMatch) {
+    await debugComic(req, res, debugMatch[1]);
     return;
   }
 
