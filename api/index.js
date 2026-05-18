@@ -52,6 +52,14 @@ function findById(catalog, id) {
   return catalog.find(c => c.id === parseInt(id, 10));
 }
 
+function pagePath(comic, page) {
+  const index = parseInt(page, 10) - 1;
+  if (!comic || !Array.isArray(comic.pages) || index < 0 || index >= comic.pages.length) {
+    return '';
+  }
+  return comic.pages[index];
+}
+
 function parseCookieToken(cookieHeader) {
   const raw = String(cookieHeader || '').trim();
   if (!raw) return '';
@@ -387,6 +395,114 @@ async function debugComic(req, res, comicId) {
   });
 }
 
+function sendAppComic(res, base, comic, includePages) {
+  const pages = Array.isArray(comic.pages) ? comic.pages : [];
+  const payload = {
+    id: comic.id,
+    title: comic.title,
+    page_count: pages.length,
+    cover_url: publicCoverUrl(base, comic.cover),
+    tags: comicTags(comic),
+    total_chapters: 1,
+  };
+
+  if (includePages) {
+    payload.page_paths = pages;
+  }
+
+  sendJson(res, 200, payload);
+}
+
+async function handleAppRoute(req, res, parsedUrl, pathname, base) {
+  if (pathname === '/app/config' || pathname === '/app/config/') {
+    sendJson(res, 200, {
+      ok: true,
+      source: SOURCE_NAME,
+      apiUrl: base,
+      auth: 'x-source-token',
+      routes: {
+        search: '/app/search/<text>/<page>',
+        comic: '/app/comic/<id>',
+        pages: '/app/pages/<id>',
+        image: '/app/image/<id>/<page>?w=840&q=82',
+      },
+    });
+    return true;
+  }
+
+  if (!pathname.startsWith('/app/')) {
+    return false;
+  }
+
+  if (!requireSourceAuth(req, res)) return true;
+
+  const catalog = await loadCatalog();
+
+  const searchMatch = pathname.match(/^\/app\/search\/([^/]+)\/(\d+)/);
+  if (searchMatch) {
+    const query = normalizeText(decodeURIComponent(searchMatch[1]));
+    const pageNum = parseInt(searchMatch[2], 10) || 1;
+    const pageSize = Math.min(parseInt(parsedUrl.searchParams.get('pageSize') || '12', 10) || 12, 24);
+    const results = catalog.filter(c => matchesSearch(c, query));
+    const start = (pageNum - 1) * pageSize;
+    const slice = results.slice(start, start + pageSize);
+
+    sendJson(res, 200, {
+      ok: true,
+      page: pageNum,
+      page_size: pageSize,
+      total: results.length,
+      has_more: results.length > start + pageSize,
+      results: slice.map(c => ({
+        id: c.id,
+        comic_id: c.id,
+        title: c.title,
+        cover_url: publicCoverUrl(base, c.cover),
+        page_count: Array.isArray(c.pages) ? c.pages.length : 0,
+        pages: Array.isArray(c.pages) ? c.pages.length : 0,
+        tags: comicTags(c),
+      })),
+    });
+    return true;
+  }
+
+  const comicMatch = pathname.match(/^\/app\/comic\/(\d+)/);
+  if (comicMatch) {
+    const comic = findById(catalog, comicMatch[1]);
+    if (!comic) {
+      sendJson(res, 404, { ok: false, error: 'not found' });
+      return true;
+    }
+    sendAppComic(res, base, comic, false);
+    return true;
+  }
+
+  const pagesMatch = pathname.match(/^\/app\/pages\/(\d+)/);
+  if (pagesMatch) {
+    const comic = findById(catalog, pagesMatch[1]);
+    if (!comic) {
+      sendJson(res, 404, { ok: false, error: 'not found' });
+      return true;
+    }
+    sendAppComic(res, base, comic, true);
+    return true;
+  }
+
+  const imageMatch = pathname.match(/^\/app\/image\/(\d+)\/(\d+)/);
+  if (imageMatch) {
+    const comic = findById(catalog, imageMatch[1]);
+    const path = pagePath(comic, imageMatch[2]);
+    if (!path) {
+      sendJson(res, 404, { ok: false, error: 'not found' });
+      return true;
+    }
+    await serveBlob(req, res, parsedUrl, path, false);
+    return true;
+  }
+
+  return false;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
@@ -401,6 +517,10 @@ module.exports = async function handler(req, res) {
   const base = baseUrl(req);
   const parsedUrl = new URL(req.url || '/', base);
   const pathname = parsedUrl.pathname;
+
+  if (await handleAppRoute(req, res, parsedUrl, pathname, base)) {
+    return;
+  }
 
   if (req.method === 'POST' && pathname === '/admin/blob') {
     await uploadBlob(req, res, parsedUrl);
