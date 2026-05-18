@@ -7,10 +7,11 @@ Existe solucao sem perder a busca online do Bandcomic, mas nao usando
 implementado neste projeto e:
 
 1. `/config` fica publico para permitir cadastrar a fonte no Bandcomic.
-2. `/search`, `/comic`, `/photo` e `/img` ficam protegidos por Cookie.
+2. `/search`, `/comic` e `/photo` ficam protegidos por Cookie.
 3. O Bandcomic recebe esse Cookie pelo plugin sincronizador do AstroBox.
 4. As paginas deixam de ser URLs raw do GitHub e passam a ser servidas por
-   uma rota do Vercel, por exemplo `/img/images/livro/001.jpg`.
+   uma rota assinada do Vercel, por exemplo
+   `/img/_signed/<exp>/<sig>/images/livro/001.jpg`.
 5. O Vercel busca a imagem no Vercel Blob privado usando
    `BLOB_READ_WRITE_TOKEN`.
 6. As capas ficam publicas apenas pelo proxy `/cover/...`, em baixa resolucao.
@@ -24,7 +25,9 @@ O app Bandcomic envia `Cookie` nas chamadas `fetch.fetch` para:
 - buscar lista de paginas;
 - baixar/abrir paginas.
 
-Isso permite proteger a busca online e as paginas com Cookie.
+Isso permite proteger a busca online com Cookie. Na pratica, o leitor/download
+de JPG pode nao reenviar Cookie em cada imagem; por isso `/photo` gera URLs
+temporariamente assinadas para as paginas.
 
 Nuance: capas na tela de busca e de detalhe usam componente visual `<image>`,
 sem header customizado. Para capas, ha tres caminhos:
@@ -106,9 +109,9 @@ Recomendacao pratica:
 /config        publico
 /search        exige Cookie
 /comic         exige Cookie
-/photo         exige Cookie
+/photo         exige Cookie e gera URLs assinadas
 /cover         publico, baixa resolucao
-/img           exige Cookie
+/img           aceita assinatura temporaria ou Cookie
 catalog.json   privado no Blob
 images         privadas no Vercel Blob
 ```
@@ -136,9 +139,11 @@ Mudancas feitas:
    `images/livro/001.jpg`, em vez de URL raw do GitHub.
 2. A API tem rota `/img/<path>` no Vercel.
 3. A API valida Cookie, Bearer, `X-Source-Token` ou `X-Admin-Token`.
-4. `/search`, `/comic`, `/photo` e `/img` ficam protegidos.
-5. Capas ficam publicas em baixa resolucao via `/cover/<path>`.
-6. A ferramenta Windows sobe imagens e catalogo para o Blob privado.
+4. `/search`, `/comic` e `/photo` ficam protegidos por Cookie.
+5. `/img` aceita assinatura temporaria gerada por `/photo`, evitando download
+   travado quando o relogio nao envia Cookie ao baixar o JPG.
+6. Capas ficam publicas em baixa resolucao via `/cover/<path>`.
+7. A ferramenta Windows sobe imagens e catalogo para o Blob privado.
 
 Conclusao: a solucao premium escolhida e viavel e foi aplicada no codigo.
 Falta apenas a configuracao operacional do Blob/token dentro do painel da

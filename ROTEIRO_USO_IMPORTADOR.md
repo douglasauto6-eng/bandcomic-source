@@ -115,8 +115,9 @@ A ferramenta vai:
 4. Enviar imagens para `/admin/blob` no Vercel.
 5. Enviar o catalogo para `/admin/catalog`.
 
-As capas ficam publicas pelo endpoint `/cover/...`. As paginas ficam privadas
-pelo endpoint `/img/...`, liberadas apenas com Cookie.
+As capas ficam publicas pelo endpoint `/cover/...`. O endpoint `/photo` exige
+Cookie e devolve paginas com assinatura temporaria em `/img/_signed/...`, para
+o leitor/download do relogio conseguir baixar as imagens sem travar em 0%.
 
 ## 8. Testar
 
@@ -135,7 +136,8 @@ Na Redmi Watch 5:
 4. Teste o zoom.
 
 Sem Cookie sincronizado, a busca/listagem deve falhar com `401`, porque a
-biblioteca esta protegida.
+biblioteca esta protegida. Depois que a busca passa pelo Cookie, as paginas
+recebem links assinados automaticamente.
 
 ## 9. Reimportar um livro
 

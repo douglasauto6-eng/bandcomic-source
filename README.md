@@ -12,7 +12,7 @@ https://github.com/sf-yuzifu/bandcomic/blob/main/docs/CUSTOM_SOURCE.md
 ## O que mudou
 
 - As paginas ficam privadas no Vercel Blob.
-- O Bandcomic recebe paginas por `/img/...`, rota protegida por Cookie.
+- O Bandcomic recebe paginas por `/img/_signed/...`, com assinatura temporaria.
 - As capas ficam publicas pelo endpoint `/cover/...`, para a tela de busca carregar sem cabecalho especial.
 - O `catalog.json` principal tambem pode ficar no Blob privado em `catalog/catalog.json`.
 - O GitHub passa a guardar o codigo do servidor, nao a biblioteca de imagens.
@@ -93,7 +93,7 @@ Na resposta do servidor, essas referencias viram:
 
 ```text
 https://bandcomic-source.vercel.app/cover/images/meu-livro/cover.jpg
-https://bandcomic-source.vercel.app/img/images/meu-livro/001.jpg
+https://bandcomic-source.vercel.app/img/_signed/.../images/meu-livro/001.jpg
 ```
 
 ## Perfis de qualidade
@@ -136,7 +136,8 @@ objetiva por ID continua funcionando:
 | `GET /search/<texto>/<pagina>` | Cookie | Busca/listagem |
 | `GET /comic/<id>` | Cookie | Detalhes do livro |
 | `GET /photo/<id>/chapter/<capitulo>` | Cookie | Lista de paginas |
-| `GET /img/<path>` | Cookie | Pagina privada via proxy Vercel |
+| `GET /img/_signed/<exp>/<sig>/<path>` | Assinatura temporaria | Pagina privada via proxy Vercel |
+| `GET /img/<path>` | Cookie | Acesso direto privado, util para teste |
 | `POST /admin/blob?path=...` | Token admin | Upload de imagem para Blob |
 | `POST /admin/catalog` | Token admin | Upload do catalogo para Blob |
 
@@ -150,7 +151,9 @@ https://bandcomic-source.vercel.app/
 ```
 
 Para testar rotas protegidas no navegador, envie Cookie `bc_token=SEU_TOKEN`.
-Sem Cookie, o esperado e receber `401 unauthorized`.
+Sem Cookie, o esperado e receber `401 unauthorized`. As URLs de paginas
+entregues por `/photo` ja saem assinadas para que o leitor/download do relogio
+consiga baixar os JPGs sem reenviar o Cookie em cada imagem.
 
 ## Estrutura
 

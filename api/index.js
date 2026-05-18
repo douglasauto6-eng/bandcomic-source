@@ -3,6 +3,7 @@
 // Vercel Blob privado + proxy Vercel + Cookie do Bandcomic
 // ─────────────────────────────────────────────────────────────────────────────
 
+const crypto = require('crypto');
 const { Readable } = require('stream');
 const fallbackCatalog = require('../catalog.json');
 
@@ -11,6 +12,7 @@ const CATALOG_BLOB_PATH = process.env.CATALOG_BLOB_PATH || 'catalog/catalog.json
 const SOURCE_TOKEN = process.env.SOURCE_TOKEN || process.env.BANDCOMIC_SOURCE_TOKEN || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || SOURCE_TOKEN;
 const CATALOG_CACHE_MS = parseInt(process.env.CATALOG_CACHE_MS || '30000', 10);
+const IMAGE_URL_TTL_SECONDS = parseInt(process.env.IMAGE_URL_TTL_SECONDS || '86400', 10);
 
 let catalogCache = { expiresAt: 0, data: null };
 let blobSdkPromise = null;
@@ -127,7 +129,32 @@ function publicCoverUrl(base, cover) {
 
 function protectedImageUrl(base, imagePath) {
   if (/^https?:\/\//i.test(imagePath)) return imagePath;
-  return `${base}/img/${encodePath(imagePath)}`;
+  const exp = Math.floor(Date.now() / 1000) + IMAGE_URL_TTL_SECONDS;
+  const sig = signImagePath(imagePath, exp);
+  return `${base}/img/_signed/${exp}/${sig}/${encodePath(imagePath)}`;
+}
+
+function signImagePath(path, exp) {
+  if (!SOURCE_TOKEN) return '';
+  return crypto
+    .createHmac('sha256', SOURCE_TOKEN)
+    .update(`${path}:${exp}`)
+    .digest('base64url');
+}
+
+function safeEqual(a, b) {
+  const left = Buffer.from(String(a || ''));
+  const right = Buffer.from(String(b || ''));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function hasValidImageSignature(parsedUrl, blobPath, signedExp, signedSig) {
+  if (!SOURCE_TOKEN) return false;
+  const exp = parseInt(signedExp || parsedUrl.searchParams.get('exp') || '0', 10);
+  const sig = signedSig || parsedUrl.searchParams.get('sig') || '';
+  if (!exp || !sig) return false;
+  if (exp < Math.floor(Date.now() / 1000)) return false;
+  return safeEqual(sig, signImagePath(blobPath, exp));
 }
 
 function matchesSearch(comic, query) {
@@ -260,13 +287,13 @@ async function uploadCatalog(req, res) {
   sendJson(res, 200, { ok: true, path: CATALOG_BLOB_PATH, comics: catalog.length });
 }
 
-async function serveBlob(req, res, blobPath, isCover) {
+async function serveBlob(req, res, parsedUrl, blobPath, isCover, signedExp, signedSig) {
   if (!isInternalPath(blobPath)) {
     sendJson(res, 400, { error: 'invalid path' });
     return;
   }
 
-  if (!isCover && !requireSourceAuth(req, res)) return;
+  if (!isCover && !hasValidImageSignature(parsedUrl, blobPath, signedExp, signedSig) && !requireSourceAuth(req, res)) return;
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     sendJson(res, 503, { error: 'BLOB_READ_WRITE_TOKEN is not configured' });
@@ -358,13 +385,27 @@ module.exports = async function handler(req, res) {
 
   const coverMatch = pathname.match(/^\/cover\/(.+)$/);
   if (coverMatch) {
-    await serveBlob(req, res, decodeURIComponent(coverMatch[1]), true);
+    await serveBlob(req, res, parsedUrl, decodeURIComponent(coverMatch[1]), true);
+    return;
+  }
+
+  const signedImageMatch = pathname.match(/^\/img\/_signed\/(\d+)\/([^/]+)\/(.+)$/);
+  if (signedImageMatch) {
+    await serveBlob(
+      req,
+      res,
+      parsedUrl,
+      decodeURIComponent(signedImageMatch[3]),
+      false,
+      signedImageMatch[1],
+      signedImageMatch[2],
+    );
     return;
   }
 
   const imageMatch = pathname.match(/^\/img\/(.+)$/);
   if (imageMatch) {
-    await serveBlob(req, res, decodeURIComponent(imageMatch[1]), false);
+    await serveBlob(req, res, parsedUrl, decodeURIComponent(imageMatch[1]), false);
     return;
   }
 
