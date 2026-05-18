@@ -2,14 +2,19 @@
 """
 Aplicativo Windows simples para importar PDFs/pastas para o Bandcomic.
 
-Ele usa o mesmo motor do converter_pdf_v3_1.py, entao a estrutura final
-continua sendo images/<slug>/ + catalog.json.
+Ele usa o mesmo motor do converter_pdf_v3_1.py, gera images/<slug>/ localmente
+e publica as imagens + catalogo no Vercel Blob privado atraves do proxy /admin.
 """
 
+import json
+import mimetypes
 import os
 import queue
 import threading
 import tkinter as tk
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -17,6 +22,7 @@ import converter_pdf_v3_1 as converter
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_API_URL = "https://bandcomic-source.vercel.app"
 os.chdir(PROJECT_DIR)
 
 
@@ -24,18 +30,18 @@ class BandcomicImporter(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Bandcomic Importer")
-        self.geometry("760x560")
-        self.minsize(680, 500)
+        self.geometry("820x610")
+        self.minsize(720, 540)
 
         self.paths = []
         self.log_queue = queue.Queue()
         self.worker = None
 
         self.profile_var = tk.StringVar(value=converter.DEFAULT_PROFILE)
-        self.github_user_var = tk.StringVar(value=converter.GITHUB_USER)
-        self.github_repo_var = tk.StringVar(value=converter.GITHUB_REPO)
-        self.github_branch_var = tk.StringVar(value=converter.GITHUB_BRANCH)
         self.tags_var = tk.StringVar(value=", ".join(converter.DEFAULT_TAGS))
+        self.api_url_var = tk.StringVar(value=DEFAULT_API_URL)
+        self.admin_token_var = tk.StringVar(value="")
+        self.upload_blob_var = tk.BooleanVar(value=True)
 
         self._build_ui()
         self.after(100, self._drain_log_queue)
@@ -61,11 +67,10 @@ class BandcomicImporter(tk.Tk):
         )
         profile.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
-        hint = ttk.Label(
+        ttk.Label(
             top,
             text="Redmi Watch 5 = melhor equilibrio; Mi Band 9 Pro = antigo; Premium = mais zoom.",
-        )
-        hint.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         ttk.Label(top, text="Tags").grid(row=2, column=0, sticky="w", pady=(8, 0))
         ttk.Entry(top, textvariable=self.tags_var).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(8, 0))
@@ -74,17 +79,25 @@ class BandcomicImporter(tk.Tk):
             text="Separe por virgula. Pesquise no relogio por PDF, Bandcomic, tag:nome ou #nome.",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        repo = ttk.LabelFrame(root, text="GitHub das imagens", padding=10)
-        repo.grid(row=1, column=0, sticky="ew", pady=(12, 8))
-        for i in range(6):
-            repo.columnconfigure(i, weight=1)
+        server = ttk.LabelFrame(root, text="Vercel Blob privado", padding=10)
+        server.grid(row=1, column=0, sticky="ew", pady=(12, 8))
+        server.columnconfigure(1, weight=1)
 
-        ttk.Label(repo, text="Usuario").grid(row=0, column=0, sticky="w")
-        ttk.Entry(repo, textvariable=self.github_user_var).grid(row=0, column=1, sticky="ew", padx=(6, 12))
-        ttk.Label(repo, text="Repo").grid(row=0, column=2, sticky="w")
-        ttk.Entry(repo, textvariable=self.github_repo_var).grid(row=0, column=3, sticky="ew", padx=(6, 12))
-        ttk.Label(repo, text="Branch").grid(row=0, column=4, sticky="w")
-        ttk.Entry(repo, textvariable=self.github_branch_var).grid(row=0, column=5, sticky="ew", padx=(6, 0))
+        ttk.Label(server, text="API").grid(row=0, column=0, sticky="w")
+        ttk.Entry(server, textvariable=self.api_url_var).grid(row=0, column=1, sticky="ew", padx=(8, 0))
+
+        ttk.Label(server, text="Token").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Entry(server, textvariable=self.admin_token_var, show="*").grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(8, 0))
+
+        ttk.Checkbutton(
+            server,
+            text="Enviar imagens e catalogo para o Vercel Blob apos converter",
+            variable=self.upload_blob_var,
+        ).grid(row=2, column=0, columnspan=2, sticky="w")
+        ttk.Label(
+            server,
+            text="Use o mesmo valor de ADMIN_TOKEN/SOURCE_TOKEN configurado no Vercel.",
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         files_box = ttk.LabelFrame(root, text="Entradas", padding=10)
         files_box.grid(row=2, column=0, sticky="nsew")
@@ -105,7 +118,7 @@ class BandcomicImporter(tk.Tk):
 
         actions = ttk.Frame(root)
         actions.grid(row=3, column=0, sticky="ew", pady=(12, 8))
-        self.run_button = ttk.Button(actions, text="Gerar images/ e catalog.json", command=self.run_conversion)
+        self.run_button = ttk.Button(actions, text="Converter e publicar", command=self.run_conversion)
         self.run_button.pack(side=tk.LEFT)
         ttk.Label(actions, text=f"Projeto: {PROJECT_DIR}").pack(side=tk.LEFT, padx=(12, 0))
 
@@ -155,6 +168,9 @@ class BandcomicImporter(tk.Tk):
         if not self.paths:
             messagebox.showwarning("Bandcomic Importer", "Adicione um PDF ou uma pasta primeiro.")
             return
+        if self.upload_blob_var.get() and not self.admin_token_var.get().strip():
+            messagebox.showwarning("Bandcomic Importer", "Informe o token do Vercel antes de publicar.")
+            return
 
         self.run_button.configure(state=tk.DISABLED)
         self.log_text.delete("1.0", tk.END)
@@ -163,22 +179,95 @@ class BandcomicImporter(tk.Tk):
         self.worker = threading.Thread(target=self._convert_worker, daemon=True)
         self.worker.start()
 
+    def _api_base_url(self):
+        return self.api_url_var.get().strip().rstrip("/")
+
+    def _request(self, url, data, content_type, token):
+        request = urllib.request.Request(
+            url,
+            data=data,
+            method="POST",
+            headers={
+                "Content-Type": content_type,
+                "X-Admin-Token": token,
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                body = response.read().decode("utf-8", errors="replace")
+                return response.status, body
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {exc.code}: {body}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Falha de rede: {exc}") from exc
+
+    def _local_file_for_ref(self, ref):
+        if not ref or ref.startswith("http://") or ref.startswith("https://"):
+            return None
+        if "\\" in ref or ".." in ref:
+            return None
+        return PROJECT_DIR / Path(*ref.split("/"))
+
+    def _iter_blob_files(self, entries):
+        seen = set()
+        for entry in entries:
+            refs = [entry.get("cover")] + list(entry.get("pages") or [])
+            for ref in refs:
+                if not ref or ref in seen:
+                    continue
+                seen.add(ref)
+                local_path = self._local_file_for_ref(ref)
+                if local_path and local_path.exists():
+                    yield ref, local_path
+                else:
+                    self.log(f"  aviso: arquivo local nao encontrado para {ref}")
+
+    def _upload_blob_file(self, base_url, token, ref, local_path):
+        query = urllib.parse.urlencode({"path": ref, "access": "private"})
+        url = f"{base_url}/admin/blob?{query}"
+        data = local_path.read_bytes()
+        content_type = mimetypes.guess_type(str(local_path))[0] or "application/octet-stream"
+        status, _ = self._request(url, data, content_type, token)
+        self.log(f"  blob {status}: {ref} ({len(data) // 1024} KB)")
+
+    def _upload_catalog(self, base_url, token, catalog):
+        url = f"{base_url}/admin/catalog"
+        data = json.dumps(catalog, ensure_ascii=False, indent=2).encode("utf-8")
+        status, _ = self._request(url, data, "application/json; charset=utf-8", token)
+        self.log(f"  catalog {status}: {len(catalog)} livro(s)")
+
+    def _publish_to_vercel(self, catalog, entries):
+        base_url = self._api_base_url()
+        token = self.admin_token_var.get().strip()
+        if not base_url:
+            raise RuntimeError("Informe a URL da API Vercel.")
+        if not token:
+            raise RuntimeError("Informe o token ADMIN_TOKEN/SOURCE_TOKEN.")
+
+        self.log("")
+        self.log("Publicando no Vercel Blob privado...")
+        for ref, local_path in self._iter_blob_files(entries):
+            self._upload_blob_file(base_url, token, ref, local_path)
+        self._upload_catalog(base_url, token, catalog)
+        self.log("Publicacao concluida.")
+
     def _convert_worker(self):
         try:
             profile = converter.PROFILES[self.profile_var.get()]
-            converter.process_inputs(
+            _, catalog, entries = converter.process_inputs(
                 self.paths,
                 profile,
                 output_dir=PROJECT_DIR / "images",
                 catalog_path=PROJECT_DIR / "catalog.json",
-                github_user=self.github_user_var.get().strip(),
-                github_repo=self.github_repo_var.get().strip(),
-                github_branch=self.github_branch_var.get().strip(),
+                storage="blob",
                 tags=self.tags_var.get(),
                 log=self.log,
             )
+            if self.upload_blob_var.get():
+                self._publish_to_vercel(catalog, entries)
             self.log("Concluido.")
-            self.after(0, lambda: messagebox.showinfo("Bandcomic Importer", "Conversao concluida."))
+            self.after(0, lambda: messagebox.showinfo("Bandcomic Importer", "Importacao concluida."))
         except Exception as exc:
             error_message = str(exc)
             self.log(f"ERRO: {error_message}")

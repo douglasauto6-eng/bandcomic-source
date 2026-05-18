@@ -4,7 +4,7 @@ converter_pdf_v3_1.py - Converte PDFs ou pastas de imagens para o Bandcomic.
 
 O protocolo do Bandcomic continua igual: o script gera imagens em images/<slug>,
 cover.jpg leve (<200 px) e atualiza catalog.json. A mudanca principal desta
-versao e o suporte a perfis de qualidade.
+versao e o suporte a perfis de qualidade e a URLs internas para Vercel Blob.
 
 Perfis:
   redmi-watch5  : 840 px / q82 / dpi 180 / 4:2:2 / leve nitidez (padrao)
@@ -45,6 +45,7 @@ CATALOG = Path("catalog.json")
 GITHUB_USER = "douglasauto6-eng"
 GITHUB_REPO = "bandcomic-source"
 GITHUB_BRANCH = "main"
+DEFAULT_STORAGE = "blob"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 DEFAULT_TAGS = ["PDF", "Bandcomic"]
@@ -163,15 +164,19 @@ def save_cover(source_img, out_dir, profile):
     return cover_path
 
 
-def image_url_for(s, filename, github_user, github_repo, github_branch):
+def image_ref_for(s, filename, storage, github_user, github_repo, github_branch):
+    if storage == "github":
+        return (
+            f"https://raw.githubusercontent.com/{github_user}/"
+            f"{github_repo}/{github_branch}/images/{s}/{filename}"
+        )
     return (
-        f"https://raw.githubusercontent.com/{github_user}/"
-        f"{github_repo}/{github_branch}/images/{s}/{filename}"
+        f"images/{s}/{filename}"
     )
 
 
-def cover_url_for(s, github_user, github_repo, github_branch):
-    return image_url_for(s, "cover.jpg", github_user, github_repo, github_branch)
+def cover_ref_for(s, storage, github_user, github_repo, github_branch):
+    return image_ref_for(s, "cover.jpg", storage, github_user, github_repo, github_branch)
 
 
 def process_pdf(
@@ -179,6 +184,7 @@ def process_pdf(
     comic_id,
     profile,
     output_dir,
+    storage,
     github_user,
     github_repo,
     github_branch,
@@ -216,7 +222,7 @@ def process_pdf(
         filename = f"{i:03d}.jpg"
         dest = out / filename
         resize_and_save(page, dest, profile)
-        urls.append(image_url_for(s, filename, github_user, github_repo, github_branch))
+        urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
         log(f"  pagina {i}/{len(pages)}")
 
     title = pdf_path.stem.replace("-", " ").replace("_", " ").title()
@@ -225,7 +231,7 @@ def process_pdf(
         "id": comic_id,
         "title": title,
         "tags": normalize_tags(tags),
-        "cover": cover_url_for(s, github_user, github_repo, github_branch),
+        "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
         "pages": urls,
     }
 
@@ -235,6 +241,7 @@ def process_image_folder(
     comic_id,
     profile,
     output_dir,
+    storage,
     github_user,
     github_repo,
     github_branch,
@@ -265,7 +272,7 @@ def process_image_folder(
         dest = out / filename
         with Image.open(img_path) as img:
             resize_and_save(img, dest, profile)
-        urls.append(image_url_for(s, filename, github_user, github_repo, github_branch))
+        urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
         log(f"  imagem {i}/{len(imgs)}")
 
     title = folder.name.replace("-", " ").replace("_", " ").title()
@@ -274,7 +281,7 @@ def process_image_folder(
         "id": comic_id,
         "title": title,
         "tags": normalize_tags(tags),
-        "cover": cover_url_for(s, github_user, github_repo, github_branch),
+        "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
         "pages": urls,
     }
 
@@ -313,6 +320,7 @@ def process_inputs(
     profile,
     output_dir=OUTPUT_DIR,
     catalog_path=CATALOG,
+    storage=DEFAULT_STORAGE,
     github_user=GITHUB_USER,
     github_repo=GITHUB_REPO,
     github_branch=GITHUB_BRANCH,
@@ -324,6 +332,7 @@ def process_inputs(
     catalog = load_catalog(catalog_path)
     next_id = max((c["id"] for c in catalog), default=0) + 1
     processed = 0
+    processed_entries = []
     tags = normalize_tags(tags)
 
     for arg in inputs:
@@ -340,6 +349,7 @@ def process_inputs(
                 next_id,
                 profile,
                 output_dir,
+                storage,
                 github_user,
                 github_repo,
                 github_branch,
@@ -360,6 +370,7 @@ def process_inputs(
                     next_id,
                     profile,
                     output_dir,
+                    storage,
                     github_user,
                     github_repo,
                     github_branch,
@@ -373,6 +384,7 @@ def process_inputs(
                         next_id,
                         profile,
                         output_dir,
+                        storage,
                         github_user,
                         github_repo,
                         github_branch,
@@ -381,6 +393,7 @@ def process_inputs(
                     )
                     if e:
                         catalog, next_id = upsert_catalog_entry(catalog, e, next_id)
+                        processed_entries.append(e)
                         processed += 1
                 continue
             else:
@@ -392,6 +405,7 @@ def process_inputs(
 
         if entry:
             catalog, next_id = upsert_catalog_entry(catalog, entry, next_id)
+            processed_entries.append(entry)
             processed += 1
 
     if processed == 0:
@@ -400,11 +414,17 @@ def process_inputs(
     save_catalog(catalog_path, catalog)
     log("")
     log(f"Catalog atualizado: {len(catalog)} livro(s)")
-    log("Proximos passos:")
-    log("  1. Suba a nova pasta images/ no GitHub")
-    log("  2. Atualize o catalog.json no GitHub")
-    log("  3. Vercel atualiza em ~30 segundos")
-    return processed, catalog
+    if storage == "github":
+        log("Proximos passos:")
+        log("  1. Suba a nova pasta images/ no GitHub")
+        log("  2. Atualize o catalog.json no GitHub")
+        log("  3. Vercel atualiza em ~30 segundos")
+    else:
+        log("Proximos passos:")
+        log("  1. Envie as imagens para o Vercel Blob privado")
+        log("  2. Envie o catalog.json para /admin/catalog")
+        log("  3. Sincronize o Cookie na pulseira quando trocar o token")
+    return processed, catalog, processed_entries
 
 
 def build_profile(args):
@@ -447,6 +467,12 @@ def parse_args(argv):
         help="JPEG subsampling: profile, auto, 0=4:4:4, 1=4:2:2, 2=4:2:0",
     )
     parser.add_argument("--no-sharpen", action="store_true", help="Desativa nitidez pos-resize")
+    parser.add_argument(
+        "--storage",
+        choices=["blob", "github"],
+        default=DEFAULT_STORAGE,
+        help="Formato das referencias gravadas no catalog.json",
+    )
     parser.add_argument("--github-user", default=GITHUB_USER)
     parser.add_argument("--github-repo", default=GITHUB_REPO)
     parser.add_argument("--github-branch", default=GITHUB_BRANCH)
@@ -468,11 +494,13 @@ def main(argv=None):
         f"Paginas: {profile.page_width}px / q{profile.page_quality} / "
         f"dpi{profile.pdf_dpi} / sharpen={'sim' if profile.sharpen else 'nao'}"
     )
+    print(f"Storage: {args.storage}")
     process_inputs(
         args.inputs,
         profile,
         output_dir=Path(args.output_dir),
         catalog_path=Path(args.catalog),
+        storage=args.storage,
         github_user=args.github_user,
         github_repo=args.github_repo,
         github_branch=args.github_branch,

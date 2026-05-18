@@ -1,11 +1,29 @@
 # Roteiro de uso do Bandcomic Importer
 
-Este roteiro serve para recomecar a biblioteca do zero usando a ferramenta
-Windows criada para o projeto.
+Este roteiro serve para recomecar a biblioteca do zero usando Vercel Blob
+privado, proxy Vercel e Cookie no Bandcomic.
 
-## 1. Abrir a ferramenta
+## 1. Configurar o Vercel uma vez
 
-No Windows, abra a pasta:
+No projeto `bandcomic-source` da Vercel, configure:
+
+```text
+BLOB_READ_WRITE_TOKEN = token do Blob privado
+SOURCE_TOKEN          = senha/token longo escolhido por voce
+ADMIN_TOKEN           = opcional; se nao existir, use o SOURCE_TOKEN no importador
+```
+
+Depois sincronize no AstroBox o Cookie:
+
+```text
+bc_token=SEU_SOURCE_TOKEN
+```
+
+Esse envio e necessario apenas uma vez, ou quando voce trocar o token.
+
+## 2. Abrir a ferramenta
+
+Abra a pasta:
 
 ```text
 C:\Users\Dougl\Documents\bandcomic-vercel
@@ -17,138 +35,110 @@ De dois cliques em:
 abrir_importador_windows.bat
 ```
 
-Se preferir pelo terminal:
+Ou pelo terminal:
 
 ```bash
 python bandcomic_importer_windows.py
 ```
 
-## 2. Escolher o perfil
-
-Use o perfil conforme o objetivo:
+## 3. Escolher o perfil
 
 | Perfil | Quando usar | Resultado |
 |---|---|---|
 | `redmi-watch5` | Padrao recomendado para a Redmi Watch 5 | Mais nitidez no zoom sem arquivos enormes |
-| `miband9pro` | Quando quiser o resultado antigo da Mi Band 9 Pro | Arquivos menores, menos detalhe |
-| `premium` | Quando um livro precisa de mais detalhe | Melhor zoom, mas ocupa mais memoria |
+| `miband9pro` | Resultado antigo da Mi Band 9 Pro | Menor, com menos detalhe |
+| `premium` | Livro que precisa de mais riqueza no zoom | Melhor detalhe, maior consumo |
 
-Para a Redmi Watch 5, comece sempre por `redmi-watch5`.
+Para recomecar, teste primeiro 1 livro em `redmi-watch5`.
 
-## 3. Conferir os dados do GitHub
+## 4. Preencher servidor e token
 
-Na area "GitHub das imagens", deixe:
+Na area `Vercel Blob privado`, confira:
 
 ```text
-Usuario: douglasauto6-eng
-Repo: bandcomic-source
-Branch: main
+API: https://bandcomic-source.vercel.app
+Token: seu ADMIN_TOKEN ou SOURCE_TOKEN
 ```
 
-Esses dados entram nas URLs geradas dentro do `catalog.json`.
+Deixe marcado:
 
-## 4. Conferir as tags
+```text
+Enviar imagens e catalogo para o Vercel Blob apos converter
+```
 
-O campo `Tags` vem preenchido por padrao com:
+## 5. Conferir tags
+
+O campo `Tags` vem com:
 
 ```text
 PDF, Bandcomic
 ```
 
-Essas tags entram em cada livro importado. Depois que o catalogo estiver no
-servidor, voce pode pesquisar na pulseira por:
-
-```text
-PDF
-Bandcomic
-tag:PDF
-#Bandcomic
-```
-
-Tambem pode adicionar tags proprias, por exemplo:
+Voce pode adicionar tags proprias:
 
 ```text
 PDF, Bandcomic, Favoritos, Portugues
 ```
 
-## 5. Adicionar conteudo
+Depois pesquise na pulseira por:
+
+```text
+PDF
+Bandcomic
+tag:PDF
+#Favoritos
+```
+
+A busca por ID tambem continua: quando a busca for numerica, o servidor trata
+como ID exato.
+
+## 6. Adicionar conteudo
+
+Use:
+
+- `Adicionar PDFs` para um ou varios PDFs.
+- `Adicionar pasta` para uma pasta com imagens ou uma pasta com PDFs.
+
+## 7. Converter e publicar
 
 Clique em:
 
-- `Adicionar PDFs` para selecionar um ou varios arquivos `.pdf`
-- `Adicionar pasta` para selecionar uma pasta com imagens ou uma pasta com PDFs
-
-Para recomecar limpo, importe poucos livros primeiro. O ideal e testar 1 livro
-na Redmi Watch 5 antes de recriar a biblioteca inteira.
-
-## 6. Gerar imagens e catalogo
-
-Clique em:
-
 ```text
-Gerar images/ e catalog.json
+Converter e publicar
 ```
 
-A ferramenta vai criar:
+A ferramenta vai:
 
-```text
-images/nome-do-livro/001.jpg
-images/nome-do-livro/002.jpg
-images/nome-do-livro/cover.jpg
-catalog.json
-```
+1. Gerar `images/nome-do-livro/001.jpg`, `002.jpg`, etc.
+2. Gerar `images/nome-do-livro/cover.jpg`.
+3. Atualizar `catalog.json`.
+4. Enviar imagens para `/admin/blob` no Vercel.
+5. Enviar o catalogo para `/admin/catalog`.
 
-As capas continuam leves em `cover.jpg`, abaixo de 200 px, seguindo a
-orientacao do autor do Bandcomic para evitar travamentos na busca.
+As capas ficam publicas pelo endpoint `/cover/...`. As paginas ficam privadas
+pelo endpoint `/img/...`, liberadas apenas com Cookie.
 
-## 7. Subir para o GitHub
+## 8. Testar
 
-A ferramenta gera os arquivos localmente. Depois disso, suba para o GitHub:
-
-```text
-https://github.com/douglasauto6-eng/bandcomic-source
-```
-
-Envie:
-
-- a pasta `images/`
-- o arquivo `catalog.json`
-
-Depois do upload/commit no GitHub, o Vercel redeploya automaticamente.
-
-## 8. Testar no servidor
-
-Depois que o Vercel atualizar, teste no navegador:
+Teste os endpoints publicos:
 
 ```text
 https://bandcomic-source.vercel.app/config
-https://bandcomic-source.vercel.app/search/*/1
-https://bandcomic-source.vercel.app/search/tag:PDF/1
+https://bandcomic-source.vercel.app/
 ```
 
-Se `/search/*/1` e `/search/tag:PDF/1` listarem os livros importados, a fonte
-esta pronta para a Redmi Watch 5.
+Na Redmi Watch 5:
 
-A busca direta por ID continua funcionando pelo fluxo nativo do Bandcomic:
-quando voce digita apenas numeros, o app chama `/comic/<id>` em vez de
-`/search`. O servidor tambem aceita `/search/1/1` como busca exata pelo ID 1
-para testes no navegador.
+1. Abra a fonte `MeusPDFs`.
+2. Busque `PDF`, `Bandcomic` ou uma tag.
+3. Abra o livro.
+4. Teste o zoom.
 
-## 9. Testar na Redmi Watch 5
+Sem Cookie sincronizado, a busca/listagem deve falhar com `401`, porque a
+biblioteca esta protegida.
 
-No Bandcomic da pulseira/relogio:
+## 9. Reimportar um livro
 
-1. Abra a fonte `MeusPDFs`
-2. Busque o livro importado
-3. Abra algumas paginas
-4. Teste zoom
-5. Se ficar bom, continue importando o restante
-
-Se ainda parecer suave demais no zoom, reimporte o mesmo livro com perfil
-`premium` e compare o tamanho final.
-
-## Observacao importante
-
-O autor do Bandcomic recomenda URLs com `width` e `quality`, mas este projeto
-serve imagens estaticas pelo GitHub. Por isso a qualidade final depende
-principalmente do conversor, nao de parametros adicionados na URL.
+Se o mesmo titulo for importado de novo, o conversor preserva o ID e substitui
+as referencias no catalogo. Use isso para comparar `redmi-watch5` contra
+`premium` sem baguncar a busca por ID.

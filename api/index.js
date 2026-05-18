@@ -1,23 +1,37 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Bandcomic Custom Source Server
-// Segue EXATAMENTE a spec: github.com/sf-yuzifu/bandcomic/blob/main/docs/CUSTOM_SOURCE.md
+// Vercel Blob privado + proxy Vercel + Cookie do Bandcomic
 // ─────────────────────────────────────────────────────────────────────────────
 
-const catalog = require('../catalog.json');
+const { Readable } = require('stream');
+const fallbackCatalog = require('../catalog.json');
 
-// Nome da fonte — deve ser igual em "name", na chave raiz e em "type"
 const SOURCE_NAME = 'MeusPDFs';
+const CATALOG_BLOB_PATH = process.env.CATALOG_BLOB_PATH || 'catalog/catalog.json';
+const SOURCE_TOKEN = process.env.SOURCE_TOKEN || process.env.BANDCOMIC_SOURCE_TOKEN || '';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || SOURCE_TOKEN;
+const CATALOG_CACHE_MS = parseInt(process.env.CATALOG_CACHE_MS || '30000', 10);
 
-// ─── Helper: monta a base URL corretamente em qualquer ambiente ───────────────
+let catalogCache = { expiresAt: 0, data: null };
+let blobSdkPromise = null;
+
+function blobSdk() {
+  if (!blobSdkPromise) {
+    blobSdkPromise = import('@vercel/blob');
+  }
+  return blobSdkPromise;
+}
+
 function baseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || 'https';
-  const host  = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
   return proto + '://' + host;
 }
 
-// ─── Helper: busca comic por id ───────────────────────────────────────────────
-function findById(id) {
-  return catalog.find(c => c.id === parseInt(id));
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.end(JSON.stringify(payload));
 }
 
 function normalizeText(value) {
@@ -30,6 +44,90 @@ function comicTags(comic) {
 
 function isAllQuery(query) {
   return !query || query === '*' || query === 'all' || query === '%2a';
+}
+
+function findById(catalog, id) {
+  return catalog.find(c => c.id === parseInt(id, 10));
+}
+
+function parseCookieToken(cookieHeader) {
+  const raw = String(cookieHeader || '').trim();
+  if (!raw) return '';
+  if (!raw.includes('=') && !raw.includes(';')) return raw;
+
+  const parts = raw.split(';').map(part => part.trim()).filter(Boolean);
+  const cookies = {};
+  for (const part of parts) {
+    const index = part.indexOf('=');
+    if (index > -1) {
+      cookies[part.slice(0, index).trim()] = decodeURIComponent(part.slice(index + 1).trim());
+    }
+  }
+  return cookies.bc_token || cookies.source_token || cookies.token || '';
+}
+
+function requestToken(req) {
+  const auth = String(req.headers.authorization || '').trim();
+  if (auth.toLowerCase().startsWith('bearer ')) {
+    return auth.slice(7).trim();
+  }
+  return (
+    req.headers['x-admin-token'] ||
+    req.headers['x-source-token'] ||
+    parseCookieToken(req.headers.cookie) ||
+    ''
+  );
+}
+
+function requireToken(req, res, expectedToken, label) {
+  if (!expectedToken) {
+    sendJson(res, 503, {
+      error: `${label} token is not configured`,
+      hint: `Set ${label === 'admin' ? 'ADMIN_TOKEN or SOURCE_TOKEN' : 'SOURCE_TOKEN'} in Vercel.`,
+    });
+    return false;
+  }
+
+  if (requestToken(req) !== expectedToken) {
+    sendJson(res, 401, { error: 'unauthorized' });
+    return false;
+  }
+
+  return true;
+}
+
+function requireSourceAuth(req, res) {
+  return requireToken(req, res, SOURCE_TOKEN, 'source');
+}
+
+function requireAdminAuth(req, res) {
+  return requireToken(req, res, ADMIN_TOKEN, 'admin');
+}
+
+function isInternalPath(value) {
+  const path = String(value || '');
+  return (
+    path &&
+    !/^https?:\/\//i.test(path) &&
+    !path.startsWith('/') &&
+    !path.includes('..') &&
+    !path.includes('\\')
+  );
+}
+
+function encodePath(path) {
+  return String(path).split('/').map(encodeURIComponent).join('/');
+}
+
+function publicCoverUrl(base, cover) {
+  if (!cover) return '';
+  if (/^https?:\/\//i.test(cover)) return cover;
+  return `${base}/cover/${encodePath(cover)}`;
+}
+
+function protectedImageUrl(base, imagePath) {
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  return `${base}/img/${encodePath(imagePath)}`;
 }
 
 function matchesSearch(comic, query) {
@@ -50,117 +148,287 @@ function matchesSearch(comic, query) {
   return title.includes(query) || tags.some(tag => tag.includes(query));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Handler principal — roteador manual compatível com Vercel Serverless
-// ─────────────────────────────────────────────────────────────────────────────
-module.exports = function handler(req, res) {
-  // CORS — necessário para acesso externo
+async function streamToText(stream) {
+  return await new Response(stream).text();
+}
+
+async function loadCatalog() {
+  const now = Date.now();
+  if (catalogCache.data && catalogCache.expiresAt > now) {
+    return catalogCache.data;
+  }
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    catalogCache = { expiresAt: now + CATALOG_CACHE_MS, data: fallbackCatalog };
+    return fallbackCatalog;
+  }
+
+  try {
+    const { get } = await blobSdk();
+    const result = await get(CATALOG_BLOB_PATH, { access: 'private' });
+    if (!result || result.statusCode === 404) {
+      catalogCache = { expiresAt: now + CATALOG_CACHE_MS, data: fallbackCatalog };
+      return fallbackCatalog;
+    }
+    if (result.statusCode && result.statusCode !== 200) {
+      throw new Error(`Blob catalog status ${result.statusCode}`);
+    }
+    const text = await streamToText(result.stream);
+    const parsed = JSON.parse(text || '[]');
+    const catalog = Array.isArray(parsed) ? parsed : [];
+    catalogCache = { expiresAt: now + CATALOG_CACHE_MS, data: catalog };
+    return catalog;
+  } catch (error) {
+    console.error('catalog blob fallback:', error);
+    catalogCache = { expiresAt: now + CATALOG_CACHE_MS, data: fallbackCatalog };
+    return fallbackCatalog;
+  }
+}
+
+async function readBody(req) {
+  if (Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string') return Buffer.from(req.body);
+  if (req.body && typeof req.body === 'object') {
+    return Buffer.from(JSON.stringify(req.body));
+  }
+
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function uploadBlob(req, res, parsedUrl) {
+  if (!requireAdminAuth(req, res)) return;
+
+  const pathname = parsedUrl.searchParams.get('path');
+  const access = parsedUrl.searchParams.get('access') || 'private';
+  if (!isInternalPath(pathname)) {
+    sendJson(res, 400, { error: 'invalid path' });
+    return;
+  }
+  if (access !== 'private' && access !== 'public') {
+    sendJson(res, 400, { error: 'invalid access' });
+    return;
+  }
+
+  const body = await readBody(req);
+  const contentType = req.headers['content-type'] || undefined;
+  const { put } = await blobSdk();
+  const blob = await put(pathname, body, {
+    access,
+    allowOverwrite: true,
+    addRandomSuffix: false,
+    contentType,
+  });
+
+  sendJson(res, 200, {
+    ok: true,
+    access,
+    pathname: blob.pathname,
+    url: blob.url,
+    downloadUrl: blob.downloadUrl,
+  });
+}
+
+async function uploadCatalog(req, res) {
+  if (!requireAdminAuth(req, res)) return;
+
+  const body = await readBody(req);
+  let catalog;
+  try {
+    catalog = JSON.parse(body.toString('utf8') || '[]');
+  } catch (error) {
+    sendJson(res, 400, { error: 'invalid catalog json' });
+    return;
+  }
+  if (!Array.isArray(catalog)) {
+    sendJson(res, 400, { error: 'catalog must be an array' });
+    return;
+  }
+
+  const { put } = await blobSdk();
+  await put(CATALOG_BLOB_PATH, JSON.stringify(catalog, null, 2), {
+    access: 'private',
+    allowOverwrite: true,
+    addRandomSuffix: false,
+    contentType: 'application/json; charset=utf-8',
+  });
+
+  catalogCache = { expiresAt: Date.now() + CATALOG_CACHE_MS, data: catalog };
+  sendJson(res, 200, { ok: true, path: CATALOG_BLOB_PATH, comics: catalog.length });
+}
+
+async function serveBlob(req, res, blobPath, isCover) {
+  if (!isInternalPath(blobPath)) {
+    sendJson(res, 400, { error: 'invalid path' });
+    return;
+  }
+
+  if (!isCover && !requireSourceAuth(req, res)) return;
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    sendJson(res, 503, { error: 'BLOB_READ_WRITE_TOKEN is not configured' });
+    return;
+  }
+
+  const { get } = await blobSdk();
+  const result = await get(blobPath, { access: 'private' });
+  if (!result || result.statusCode === 404) {
+    sendJson(res, 404, { error: 'not found' });
+    return;
+  }
+  if (result.statusCode && result.statusCode !== 200) {
+    sendJson(res, result.statusCode, { error: 'blob fetch failed' });
+    return;
+  }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', result.blob?.contentType || 'application/octet-stream');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', isCover ? 'public, max-age=3600' : 'private, max-age=60');
+
+  const stream = result.stream;
+  if (stream && typeof stream.pipe === 'function') {
+    stream.pipe(res);
+  } else {
+    Readable.fromWeb(stream).pipe(res);
+  }
+}
+
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cookie, Authorization, X-Admin-Token, X-Source-Token');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(200); res.end();
+    res.writeHead(200);
+    res.end();
     return;
   }
 
-  const url  = req.url || '/';
   const base = baseUrl(req);
+  const parsedUrl = new URL(req.url || '/', base);
+  const pathname = parsedUrl.pathname;
 
-  // ── GET /config ─────────────────────────────────────────────────────────────
-  // Formato EXATO exigido pelo Bandcomic (sem JSON.stringify para não escapar < >)
-  if (url === '/config' || url === '/config/') {
+  if (req.method === 'POST' && pathname === '/admin/blob') {
+    await uploadBlob(req, res, parsedUrl);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/admin/catalog') {
+    await uploadCatalog(req, res);
+    return;
+  }
+
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'method not allowed' });
+    return;
+  }
+
+  if (pathname === '/config' || pathname === '/config/') {
     const obj = {};
     obj[SOURCE_NAME] = {
-      name:       SOURCE_NAME,
-      apiUrl:     base,
+      name: SOURCE_NAME,
+      apiUrl: base,
       detailPath: '/comic/<id>',
-      photoPath:  '/photo/<id>/chapter/<chapter>',
+      photoPath: '/photo/<id>/chapter/<chapter>',
       searchPath: '/search/<text>/<page>',
-      type:       SOURCE_NAME
+      type: SOURCE_NAME,
     };
-    res.writeHead(200); res.end(JSON.stringify(obj));
+    sendJson(res, 200, obj);
     return;
   }
 
-  // ── GET /search/<text>/<page> ────────────────────────────────────────────────
-  // Spec: { page, has_more, results: [{comic_id, title, cover_url, pages}] }
-  const searchMatch = url.match(/^\/search\/([^/]+)\/(\d+)/);
+  if (pathname === '/' || pathname === '') {
+    const catalog = await loadCatalog();
+    sendJson(res, 200, {
+      status: 'online',
+      source: SOURCE_NAME,
+      storage: 'vercel-blob-private',
+      protected: Boolean(SOURCE_TOKEN),
+      catalog: process.env.BLOB_READ_WRITE_TOKEN ? 'blob' : 'local-fallback',
+      comics: catalog.length,
+      titles: catalog.map(c => c.title),
+      docs: 'https://github.com/sf-yuzifu/bandcomic/blob/main/docs/CUSTOM_SOURCE.md',
+    });
+    return;
+  }
+
+  const coverMatch = pathname.match(/^\/cover\/(.+)$/);
+  if (coverMatch) {
+    await serveBlob(req, res, decodeURIComponent(coverMatch[1]), true);
+    return;
+  }
+
+  const imageMatch = pathname.match(/^\/img\/(.+)$/);
+  if (imageMatch) {
+    await serveBlob(req, res, decodeURIComponent(imageMatch[1]), false);
+    return;
+  }
+
+  if (!requireSourceAuth(req, res)) return;
+
+  const catalog = await loadCatalog();
+
+  const searchMatch = pathname.match(/^\/search\/([^/]+)\/(\d+)/);
   if (searchMatch) {
-    const query    = normalizeText(decodeURIComponent(searchMatch[1]));
-    const pageNum  = parseInt(searchMatch[2]) || 1;
+    const query = normalizeText(decodeURIComponent(searchMatch[1]));
+    const pageNum = parseInt(searchMatch[2], 10) || 1;
     const pageSize = 10;
-
     const results = catalog.filter(c => matchesSearch(c, query));
+    const start = (pageNum - 1) * pageSize;
+    const slice = results.slice(start, start + pageSize);
 
-    const start   = (pageNum - 1) * pageSize;
-    const slice   = results.slice(start, start + pageSize);
-    const hasMore = results.length > start + pageSize;
-
-    res.writeHead(200); res.end(JSON.stringify({
-      page:     pageNum,
-      has_more: hasMore,
-      results:  slice.map(c => ({
-        comic_id:  c.id,
-        title:     c.title,
-        cover_url: c.cover,   // IMPORTANTE: dev diz manter largura <= 200px
-        pages:     c.pages.length
-      }))
-    }));
+    sendJson(res, 200, {
+      page: pageNum,
+      has_more: results.length > start + pageSize,
+      results: slice.map(c => ({
+        comic_id: c.id,
+        title: c.title,
+        cover_url: publicCoverUrl(base, c.cover),
+        pages: Array.isArray(c.pages) ? c.pages.length : 0,
+      })),
+    });
     return;
   }
 
-  // ── GET /comic/<id> ─────────────────────────────────────────────────────────
-  // Spec: { item_id, name, page_count, views, rate, cover, tags, total_chapters }
-  const detailMatch = url.match(/^\/comic\/(\d+)/);
+  const detailMatch = pathname.match(/^\/comic\/(\d+)/);
   if (detailMatch) {
-    const comic = findById(detailMatch[1]);
+    const comic = findById(catalog, detailMatch[1]);
     if (!comic) {
-      res.writeHead(404); res.end(JSON.stringify({ error: 'not found' }));
+      sendJson(res, 404, { error: 'not found' });
       return;
     }
-    res.writeHead(200); res.end(JSON.stringify({
-      item_id:        comic.id,
-      name:           comic.title,
-      page_count:     comic.pages.length,
-      views:          0,
-      rate:           5.0,
-      cover:          comic.cover,
-      tags:           comic.tags || ['PDF'],
-      total_chapters: 1
-    }));
+
+    sendJson(res, 200, {
+      item_id: comic.id,
+      name: comic.title,
+      page_count: Array.isArray(comic.pages) ? comic.pages.length : 0,
+      views: 0,
+      rate: 5.0,
+      cover: publicCoverUrl(base, comic.cover),
+      tags: comicTags(comic),
+      total_chapters: 1,
+    });
     return;
   }
 
-  // ── GET /photo/<id>/chapter/<chapter> ────────────────────────────────────────
-  // Spec: { title, images: [{url}] }
-  // Dev diz: adicione ?width=600&quality=50 em cada url se possível
-  const photoMatch = url.match(/^\/photo\/(\d+)\/chapter\/(\d+)/);
+  const photoMatch = pathname.match(/^\/photo\/(\d+)\/chapter\/(\d+)/);
   if (photoMatch) {
-    const comic = findById(photoMatch[1]);
+    const comic = findById(catalog, photoMatch[1]);
     if (!comic) {
-      res.writeHead(404); res.end(JSON.stringify({ error: 'not found' }));
+      sendJson(res, 404, { error: 'not found' });
       return;
     }
-    res.writeHead(200); res.end(JSON.stringify({
-      title:  comic.title,
-      images: comic.pages.map(u => ({ url: u }))
-    }));
+
+    sendJson(res, 200, {
+      title: comic.title,
+      images: (comic.pages || []).map(u => ({ url: protectedImageUrl(base, u) })),
+    });
     return;
   }
 
-  // ── GET / — status ───────────────────────────────────────────────────────────
-  if (url === '/' || url === '') {
-    res.writeHead(200); res.end(JSON.stringify({
-      status:  'online',
-      source:  SOURCE_NAME,
-      base:    base,
-      comics:  catalog.length,
-      titles:  catalog.map(c => c.title),
-      docs:    'https://github.com/sf-yuzifu/bandcomic/blob/main/docs/CUSTOM_SOURCE.md'
-    }));
-    return;
-  }
-
-  res.writeHead(404); res.end(JSON.stringify({ error: 'route not found' }));
+  sendJson(res, 404, { error: 'route not found' });
 };
