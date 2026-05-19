@@ -435,6 +435,7 @@ function sendAppComic(res, base, comic, includePages) {
 
   if (includePages) {
     payload.page_paths = pages;
+    payload.page_urls = pages.map(page => protectedImageUrl(base, page));
   }
 
   sendJson(res, 200, payload);
