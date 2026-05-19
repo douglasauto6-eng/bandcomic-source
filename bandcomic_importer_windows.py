@@ -36,6 +36,7 @@ class BandcomicImporter(tk.Tk):
         self.paths = []
         self.log_queue = queue.Queue()
         self.worker = None
+        self.delete_dialog = None
 
         self.profile_var = tk.StringVar(value=converter.DEFAULT_PROFILE)
         self.tags_var = tk.StringVar(value=", ".join(converter.DEFAULT_TAGS))
@@ -120,6 +121,8 @@ class BandcomicImporter(tk.Tk):
         actions.grid(row=3, column=0, sticky="ew", pady=(12, 8))
         self.run_button = ttk.Button(actions, text="Converter e publicar", command=self.run_conversion)
         self.run_button.pack(side=tk.LEFT)
+        self.delete_button = ttk.Button(actions, text="Excluir livro da nuvem", command=self.open_delete_dialog)
+        self.delete_button.pack(side=tk.LEFT, padx=(8, 0))
         ttk.Label(actions, text=f"Projeto: {PROJECT_DIR}").pack(side=tk.LEFT, padx=(12, 0))
 
         ttk.Label(root, text="Log").grid(row=4, column=0, sticky="w")
@@ -172,12 +175,17 @@ class BandcomicImporter(tk.Tk):
             messagebox.showwarning("Bandcomic Importer", "Informe o token do Vercel antes de publicar.")
             return
 
-        self.run_button.configure(state=tk.DISABLED)
+        self._set_actions_enabled(False)
         self.log_text.delete("1.0", tk.END)
         self.log("Iniciando conversao...")
 
         self.worker = threading.Thread(target=self._convert_worker, daemon=True)
         self.worker.start()
+
+    def _set_actions_enabled(self, enabled):
+        state = tk.NORMAL if enabled else tk.DISABLED
+        self.run_button.configure(state=state)
+        self.delete_button.configure(state=state)
 
     def _api_base_url(self):
         return self.api_url_var.get().strip().rstrip("/")
@@ -202,6 +210,10 @@ class BandcomicImporter(tk.Tk):
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Falha de rede: {exc}") from exc
 
+    def _json_request(self, url, payload, token):
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        return self._request(url, data, "application/json; charset=utf-8", token)
+
     def _local_file_for_ref(self, ref):
         if not ref or ref.startswith("http://") or ref.startswith("https://"):
             return None
@@ -212,9 +224,8 @@ class BandcomicImporter(tk.Tk):
     def _iter_blob_files(self, entries):
         seen = set()
         for entry in entries:
-            refs = [entry.get("cover")] + list(entry.get("pages") or [])
-            for ref in refs:
-                if not ref or ref in seen:
+            for ref in self._entry_refs(entry):
+                if ref in seen:
                     continue
                 seen.add(ref)
                 local_path = self._local_file_for_ref(ref)
@@ -222,6 +233,20 @@ class BandcomicImporter(tk.Tk):
                     yield ref, local_path
                 else:
                     self.log(f"  aviso: arquivo local nao encontrado para {ref}")
+
+    def _entry_refs(self, entry):
+        refs = []
+        seen = set()
+        for ref in [entry.get("cover")] + list(entry.get("pages") or []):
+            if not ref or ref in seen:
+                continue
+            if ref.startswith("http://") or ref.startswith("https://"):
+                continue
+            if "\\" in ref or ".." in ref or ref.startswith("/"):
+                continue
+            seen.add(ref)
+            refs.append(ref)
+        return refs
 
     def _upload_blob_file(self, base_url, token, ref, local_path):
         query = urllib.parse.urlencode({"path": ref, "access": "private"})
@@ -252,6 +277,137 @@ class BandcomicImporter(tk.Tk):
         self._upload_catalog(base_url, token, catalog)
         self.log("Publicacao concluida.")
 
+    def open_delete_dialog(self):
+        if self.worker and self.worker.is_alive():
+            return
+        if not self.admin_token_var.get().strip():
+            messagebox.showwarning("Bandcomic Importer", "Informe o token do Vercel antes de excluir.")
+            return
+
+        catalog_path = PROJECT_DIR / "catalog.json"
+        catalog = converter.load_catalog(catalog_path)
+        if not catalog:
+            messagebox.showinfo("Bandcomic Importer", "O catalog.json local esta vazio.")
+            return
+
+        if self.delete_dialog and self.delete_dialog.winfo_exists():
+            self.delete_dialog.lift()
+            return
+
+        dialog = tk.Toplevel(self)
+        self.delete_dialog = dialog
+        dialog.title("Excluir livro da nuvem")
+        dialog.geometry("560x380")
+        dialog.minsize(480, 320)
+        dialog.transient(self)
+
+        frame = ttk.Frame(dialog, padding=12)
+        frame.pack(fill=tk.BOTH, expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(
+            frame,
+            text="Selecione o livro que sera removido do Blob e do catalogo publicado.",
+        ).grid(row=0, column=0, sticky="w")
+
+        list_frame = ttk.Frame(frame)
+        list_frame.grid(row=1, column=0, sticky="nsew", pady=(10, 10))
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+
+        listbox = tk.Listbox(list_frame, height=10)
+        listbox.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=listbox.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        listbox.configure(yscrollcommand=scroll.set)
+
+        for entry in catalog:
+            pages = len(entry.get("pages") or [])
+            listbox.insert(tk.END, f"{entry.get('id')} - {entry.get('title', 'Sem titulo')} ({pages} pags.)")
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=2, column=0, sticky="e")
+        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT)
+
+        def confirm_delete():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("Bandcomic Importer", "Selecione um livro para excluir.")
+                return
+            entry = catalog[selection[0]]
+            refs = self._entry_refs(entry)
+            title = entry.get("title", "Sem titulo")
+            answer = messagebox.askyesno(
+                "Confirmar exclusao",
+                (
+                    f"Excluir '{title}' da nuvem?\n\n"
+                    f"Isto remove {len(refs)} arquivo(s) do Blob, retira o livro do catalog.json "
+                    "e publica o catalogo atualizado.\n\n"
+                    "Os PDFs/pastas originais e as imagens locais serao preservados."
+                ),
+                parent=dialog,
+            )
+            if not answer:
+                return
+            dialog.destroy()
+            self._start_delete_worker(entry)
+
+        ttk.Button(buttons, text="Excluir selecionado", command=confirm_delete).pack(side=tk.RIGHT, padx=(0, 8))
+
+    def _start_delete_worker(self, entry):
+        if self.worker and self.worker.is_alive():
+            return
+        self._set_actions_enabled(False)
+        self.log_text.delete("1.0", tk.END)
+        self.log("Iniciando exclusao da nuvem...")
+        self.worker = threading.Thread(target=self._delete_book_worker, args=(entry,), daemon=True)
+        self.worker.start()
+
+    def _delete_blob_files(self, base_url, token, refs):
+        url = f"{base_url}/admin/blob/delete"
+        status, body = self._json_request(url, {"paths": refs}, token)
+        self.log(f"  delete {status}: {len(refs)} arquivo(s)")
+        return body
+
+    def _delete_book_worker(self, entry):
+        try:
+            base_url = self._api_base_url()
+            token = self.admin_token_var.get().strip()
+            if not base_url:
+                raise RuntimeError("Informe a URL da API Vercel.")
+            if not token:
+                raise RuntimeError("Informe o token ADMIN_TOKEN/SOURCE_TOKEN.")
+
+            catalog_path = PROJECT_DIR / "catalog.json"
+            catalog = converter.load_catalog(catalog_path)
+            entry_id = entry.get("id")
+            current = next((item for item in catalog if item.get("id") == entry_id), None)
+            if not current:
+                raise RuntimeError("Livro nao encontrado no catalog.json local.")
+
+            refs = self._entry_refs(current)
+            title = current.get("title", f"ID {entry_id}")
+            self.log(f"Livro: {title}")
+            self.log(f"Arquivos no Blob: {len(refs)}")
+
+            next_catalog = [item for item in catalog if item.get("id") != entry_id]
+            self._upload_catalog(base_url, token, next_catalog)
+
+            self._delete_blob_files(base_url, token, refs)
+
+            converter.save_catalog(catalog_path, next_catalog)
+            self.log(f"  catalog local: {len(next_catalog)} livro(s)")
+            self.log("Exclusao concluida.")
+            self.log("Arquivos locais preservados em images/ e nas pastas/PDFs originais.")
+            self.after(0, lambda: messagebox.showinfo("Bandcomic Importer", "Livro excluido da nuvem."))
+        except Exception as exc:
+            error_message = str(exc)
+            self.log(f"ERRO: {error_message}")
+            self.after(0, lambda: messagebox.showerror("Bandcomic Importer", error_message))
+        finally:
+            self.after(0, lambda: self._set_actions_enabled(True))
+
     def _convert_worker(self):
         try:
             profile = converter.PROFILES[self.profile_var.get()]
@@ -273,7 +429,7 @@ class BandcomicImporter(tk.Tk):
             self.log(f"ERRO: {error_message}")
             self.after(0, lambda: messagebox.showerror("Bandcomic Importer", error_message))
         finally:
-            self.after(0, lambda: self.run_button.configure(state=tk.NORMAL))
+            self.after(0, lambda: self._set_actions_enabled(True))
 
 
 if __name__ == "__main__":

@@ -318,6 +318,49 @@ async function uploadBlob(req, res, parsedUrl) {
   });
 }
 
+async function deleteBlobs(req, res, parsedUrl) {
+  if (!requireAdminAuth(req, res)) return;
+
+  let paths = [];
+  const queryPath = parsedUrl.searchParams.get('path');
+  if (queryPath) {
+    paths = [queryPath];
+  } else {
+    const body = await readBody(req);
+    try {
+      const parsed = JSON.parse(body.toString('utf8') || '{}');
+      paths = Array.isArray(parsed.paths) ? parsed.paths : [];
+    } catch (error) {
+      sendJson(res, 400, { error: 'invalid delete json' });
+      return;
+    }
+  }
+
+  paths = [...new Set(paths.map(path => String(path || '').trim()).filter(Boolean))];
+  if (paths.length > 1000) {
+    sendJson(res, 400, { error: 'too many paths', limit: 1000 });
+    return;
+  }
+
+  const invalid = paths.find(path => !isInternalPath(path));
+  if (invalid) {
+    sendJson(res, 400, { error: 'invalid path', path: invalid });
+    return;
+  }
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    sendJson(res, 503, { error: 'BLOB_READ_WRITE_TOKEN is not configured' });
+    return;
+  }
+
+  if (paths.length) {
+    const { del } = await blobSdk();
+    await del(paths);
+  }
+
+  sendJson(res, 200, { ok: true, deleted: paths.length, paths });
+}
+
 async function uploadCatalog(req, res) {
   if (!requireAdminAuth(req, res)) return;
 
@@ -554,6 +597,11 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'POST' && pathname === '/admin/blob') {
     await uploadBlob(req, res, parsedUrl);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/admin/blob/delete') {
+    await deleteBlobs(req, res, parsedUrl);
     return;
   }
 

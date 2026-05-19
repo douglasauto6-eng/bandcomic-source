@@ -79,6 +79,11 @@ Na tela:
 7. Adicione PDFs ou uma pasta de imagens/PDFs.
 8. Clique em `Converter e publicar`.
 
+Para remover um livro publicado, use `Excluir livro da nuvem`. A ferramenta
+apaga capa e paginas do Blob, remove o livro do `catalog.json` local e publica
+o catalogo atualizado. PDFs, pastas originais e imagens locais em `images/`
+ficam preservados.
+
 O importador gera a pasta local `images/` e atualiza `catalog.json`, mas publica
 o conteudo real no Blob privado. As referencias no catalogo ficam assim:
 
@@ -139,6 +144,7 @@ objetiva por ID continua funcionando:
 | `GET /img/_signed/<exp>/<sig>/<path>` | Assinatura temporaria | Pagina privada via proxy Vercel |
 | `GET /img/<path>` | Cookie | Acesso direto privado, util para teste |
 | `POST /admin/blob?path=...` | Token admin | Upload de imagem para Blob |
+| `POST /admin/blob/delete` | Token admin | Exclusao de uma lista de arquivos no Blob |
 | `POST /admin/catalog` | Token admin | Upload do catalogo para Blob |
 
 ## Testes rapidos

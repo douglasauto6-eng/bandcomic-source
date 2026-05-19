@@ -1,7 +1,7 @@
 # Roteiro de uso do Bandcomic Importer
 
-Este roteiro serve para recomecar a biblioteca do zero usando Vercel Blob
-privado, proxy Vercel e Cookie no Bandcomic.
+Este roteiro serve para adicionar ou reimportar livros no servidor do
+BandComic RW5 proprio, usando Vercel Blob privado e proxy Vercel.
 
 ## 1. Configurar o Vercel uma vez
 
@@ -13,13 +13,14 @@ SOURCE_TOKEN          = senha/token longo escolhido por voce
 ADMIN_TOKEN           = opcional; se nao existir, use o SOURCE_TOKEN no importador
 ```
 
-Depois sincronize no AstroBox o Cookie:
+No app proprio RW5 nao usamos Cookie do AstroBox. O `SOURCE_TOKEN` fica
+embutido no build local da `.rpk`, via:
 
 ```text
-bc_token=SEU_SOURCE_TOKEN
+C:\Users\Dougl\Documents\Codex\2026-05-18\precisamos-falar-sobre-nosso-servidor-pessoal\bandcomic-rw5\.env.local
 ```
 
-Esse envio e necessario apenas uma vez, ou quando voce trocar o token.
+Se trocar o `SOURCE_TOKEN`, gere uma nova `.rpk` e reinstale no relogio.
 
 ## 2. Abrir a ferramenta
 
@@ -112,12 +113,12 @@ A ferramenta vai:
 1. Gerar `images/nome-do-livro/001.jpg`, `002.jpg`, etc.
 2. Gerar `images/nome-do-livro/cover.jpg`.
 3. Atualizar `catalog.json`.
-4. Enviar imagens para `/admin/blob` no Vercel.
-5. Enviar o catalogo para `/admin/catalog`.
+4. Gravar as dimensoes reais das paginas em `page_sizes`.
+5. Enviar imagens para `/admin/blob` no Vercel.
+6. Enviar o catalogo para `/admin/catalog`.
 
-As capas ficam publicas pelo endpoint `/cover/...`. O endpoint `/photo` exige
-Cookie e devolve paginas com assinatura temporaria em `/img/_signed/...`, para
-o leitor/download do relogio conseguir baixar as imagens sem travar em 0%.
+As capas ficam publicas pelo endpoint `/cover/...`. As paginas ficam privadas
+no Blob e o app recebe links temporarios assinados por `/app/pages/<id>`.
 
 ## 8. Testar
 
@@ -128,19 +129,53 @@ https://bandcomic-source.vercel.app/config
 https://bandcomic-source.vercel.app/
 ```
 
-Na Redmi Watch 5:
+Na Redmi Watch 5, usando o app proprio:
 
-1. Abra a fonte `MeusPDFs`.
-2. Busque `PDF`, `Bandcomic` ou uma tag.
+1. Abra `BandComic RW5`.
+2. Busque `*`, `PDF`, `Bandcomic`, uma tag ou um ID.
 3. Abra o livro.
-4. Teste o zoom.
+4. Teste zoom e rolagem vertical.
+5. Use `Baixar` para salvar offline.
 
-Sem Cookie sincronizado, a busca/listagem deve falhar com `401`, porque a
-biblioteca esta protegida. Depois que a busca passa pelo Cookie, as paginas
-recebem links assinados automaticamente.
+Se a busca retornar `401`, o token da `.rpk` nao bate com o `SOURCE_TOKEN` da
+Vercel. Nesse caso, atualize `.env.local`, rode o gerador da RPK e reinstale.
 
 ## 9. Reimportar um livro
 
 Se o mesmo titulo for importado de novo, o conversor preserva o ID e substitui
 as referencias no catalogo. Use isso para comparar `redmi-watch5` contra
 `premium` sem baguncar a busca por ID.
+
+## 10. Excluir um livro da nuvem
+
+Para remover um livro publicado:
+
+1. Abra `abrir_importador_windows.bat`.
+2. Confira `API` e informe o `Token`.
+3. Clique em `Excluir livro da nuvem`.
+4. Selecione o livro.
+5. Confirme a exclusao.
+
+A ferramenta vai:
+
+1. Reenviar o `catalog.json` atualizado para `/admin/catalog`, ja sem o livro.
+2. Apagar a capa e as paginas do Vercel Blob privado.
+3. Atualizar o `catalog.json` local.
+
+Ela nao apaga seus PDFs, pastas originais nem as imagens geradas dentro de
+`images/`. Assim, voce ainda consegue reimportar o livro depois se quiser.
+
+Depois de excluir, remova tambem a copia offline dentro do app no relogio se
+ela ja tiver sido baixada.
+
+## 11. O que ainda e manual
+
+No uso normal, a ferramenta faz a conversao, catalogo, upload de imagens e
+publicacao do catalogo. Voce nao precisa mexer no GitHub nem fazer redeploy
+para adicionar livros.
+
+Procedimentos manuais continuam existindo apenas nestes casos:
+
+- trocar `SOURCE_TOKEN`: atualizar Vercel, `.env.local`, gerar nova `.rpk`;
+- alterar o codigo do servidor/app: fazer commit/deploy ou gerar nova `.rpk`;
+- limpar a biblioteca offline no relogio quando quiser baixar tudo de novo.
