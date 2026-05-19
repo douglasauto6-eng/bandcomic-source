@@ -60,6 +60,17 @@ function pagePath(comic, page) {
   return comic.pages[index];
 }
 
+function normalizePageSize(size) {
+  const width = parseInt(size?.width || size?.w || size?.[0] || '0', 10);
+  const height = parseInt(size?.height || size?.h || size?.[1] || '0', 10);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function pageSizes(comic, pages) {
+  const source = Array.isArray(comic.page_sizes) ? comic.page_sizes : [];
+  return pages.map((_, index) => normalizePageSize(source[index]));
+}
+
 function parseCookieToken(cookieHeader) {
   const raw = String(cookieHeader || '').trim();
   if (!raw) return '';
@@ -436,6 +447,7 @@ function sendAppComic(res, base, comic, includePages) {
   if (includePages) {
     payload.page_paths = pages;
     payload.page_urls = pages.map(page => protectedImageUrl(base, page));
+    payload.page_sizes = pageSizes(comic, pages);
   }
 
   sendJson(res, 200, payload);

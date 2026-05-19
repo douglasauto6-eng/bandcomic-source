@@ -153,6 +153,7 @@ def resize_and_save(img, dest, profile):
     img = resize_to_width(img, profile.page_width)
     img = maybe_sharpen(img, profile)
     save_jpeg(img, dest, profile.page_quality, profile.subsampling)
+    return {"width": img.size[0], "height": img.size[1]}
 
 
 def save_cover(source_img, out_dir, profile):
@@ -218,10 +219,11 @@ def process_pdf(
     save_cover(pages[0], out, profile)
 
     urls = []
+    page_sizes = []
     for i, page in enumerate(pages, 1):
         filename = f"{i:03d}.jpg"
         dest = out / filename
-        resize_and_save(page, dest, profile)
+        page_sizes.append(resize_and_save(page, dest, profile))
         urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
         log(f"  pagina {i}/{len(pages)}")
 
@@ -233,6 +235,7 @@ def process_pdf(
         "tags": normalize_tags(tags),
         "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
         "pages": urls,
+        "page_sizes": page_sizes,
     }
 
 
@@ -267,11 +270,12 @@ def process_image_folder(
         save_cover(first, out, profile)
 
     urls = []
+    page_sizes = []
     for i, img_path in enumerate(imgs, 1):
         filename = f"{i:03d}.jpg"
         dest = out / filename
         with Image.open(img_path) as img:
-            resize_and_save(img, dest, profile)
+            page_sizes.append(resize_and_save(img, dest, profile))
         urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
         log(f"  imagem {i}/{len(imgs)}")
 
@@ -283,6 +287,7 @@ def process_image_folder(
         "tags": normalize_tags(tags),
         "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
         "pages": urls,
+        "page_sizes": page_sizes,
     }
 
 
