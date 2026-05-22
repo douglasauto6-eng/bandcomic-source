@@ -30,8 +30,8 @@ class BandcomicImporter(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Bandcomic Importer")
-        self.geometry("820x610")
-        self.minsize(720, 540)
+        self.geometry("820x660")
+        self.minsize(720, 580)
 
         self.paths = []
         self.log_queue = queue.Queue()
@@ -40,6 +40,7 @@ class BandcomicImporter(tk.Tk):
 
         self.profile_var = tk.StringVar(value=converter.DEFAULT_PROFILE)
         self.tags_var = tk.StringVar(value=", ".join(converter.DEFAULT_TAGS))
+        self.webtoon_mode_var = tk.BooleanVar(value=False)
         self.api_url_var = tk.StringVar(value=DEFAULT_API_URL)
         self.admin_token_var = tk.StringVar(value="")
         self.upload_blob_var = tk.BooleanVar(value=True)
@@ -79,6 +80,16 @@ class BandcomicImporter(tk.Tk):
             top,
             text="Separe por virgula. Pesquise no relogio por PDF, Bandcomic, tag:nome ou #nome.",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        ttk.Checkbutton(
+            top,
+            text="Modo webtoon vertical: encaixa na largura da RW5 e divide imagens muito longas",
+            variable=self.webtoon_mode_var,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(
+            top,
+            text="Use apenas para paginas compridas tipo 720x10000; livros comuns deixe desligado.",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         server = ttk.LabelFrame(root, text="Vercel Blob privado", padding=10)
         server.grid(row=1, column=0, sticky="ew", pady=(12, 8))
@@ -418,6 +429,7 @@ class BandcomicImporter(tk.Tk):
                 catalog_path=PROJECT_DIR / "catalog.json",
                 storage="blob",
                 tags=self.tags_var.get(),
+                layout=converter.LAYOUT_WEBTOON if self.webtoon_mode_var.get() else converter.LAYOUT_STANDARD,
                 log=self.log,
             )
             if self.upload_blob_var.get():
