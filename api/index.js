@@ -493,6 +493,7 @@ function sendAppComic(res, base, comic, includePages) {
     page_count: pages.length,
     cover_url: publicCoverUrl(base, comic),
     tags: comicTags(comic),
+    layout: comic.layout || 'standard',
     total_chapters: 1,
   };
 
