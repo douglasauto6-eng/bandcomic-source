@@ -60,6 +60,15 @@ function pagePath(comic, page) {
   return comic.pages[index];
 }
 
+function isWebtoonBlocks(comic) {
+  return comic?.layout === 'webtoon-blocks' && Array.isArray(comic.webtoon_pages);
+}
+
+function logicalPageCount(comic) {
+  if (isWebtoonBlocks(comic)) return comic.webtoon_pages.length;
+  return Array.isArray(comic?.pages) ? comic.pages.length : 0;
+}
+
 function normalizePageSize(size) {
   const width = parseInt(size?.width || size?.w || size?.[0] || '0', 10);
   const height = parseInt(size?.height || size?.h || size?.[1] || '0', 10);
@@ -69,6 +78,27 @@ function normalizePageSize(size) {
 function pageSizes(comic, pages) {
   const source = Array.isArray(comic.page_sizes) ? comic.page_sizes : [];
   return pages.map((_, index) => normalizePageSize(source[index]));
+}
+
+function logicalPageSizes(comic) {
+  if (!isWebtoonBlocks(comic)) {
+    return pageSizes(comic, Array.isArray(comic.pages) ? comic.pages : []);
+  }
+  return comic.webtoon_pages.map(page => normalizePageSize(page) || { width: 360, height: 360 });
+}
+
+function webtoonPagesPayload(base, comic) {
+  if (!isWebtoonBlocks(comic)) return [];
+  return comic.webtoon_pages.map(page => {
+    const blocks = Array.isArray(page.blocks) ? page.blocks : [];
+    const blockSizes = Array.isArray(page.block_sizes) ? page.block_sizes : [];
+    return {
+      width: parseInt(page.width || '0', 10) || 360,
+      height: parseInt(page.height || '0', 10) || 360,
+      block_urls: blocks.map(block => protectedImageUrl(base, block)),
+      block_sizes: blocks.map((_, index) => normalizePageSize(blockSizes[index]) || null),
+    };
+  });
 }
 
 function parseCookieToken(cookieHeader) {
@@ -236,8 +266,8 @@ function sendAppSearch(res, base, catalog, rawQuery, rawPage, rawPageSize) {
       comic_id: c.id,
       title: c.title,
       cover_url: publicCoverUrl(base, c),
-      page_count: Array.isArray(c.pages) ? c.pages.length : 0,
-      pages: Array.isArray(c.pages) ? c.pages.length : 0,
+      page_count: logicalPageCount(c),
+      pages: logicalPageCount(c),
       tags: comicTags(c),
     })),
   });
@@ -479,7 +509,7 @@ async function debugComic(req, res, comicId) {
     imageUrlMode: 'signed-path-v2',
     supportsHead: true,
     comics: catalog.length,
-    pageCount: Array.isArray(comic.pages) ? comic.pages.length : 0,
+    pageCount: logicalPageCount(comic),
     cover: await blobStatus(comic.cover),
     firstPage: await blobStatus(firstPage),
   });
@@ -490,7 +520,7 @@ function sendAppComic(res, base, comic, includePages) {
   const payload = {
     id: comic.id,
     title: comic.title,
-    page_count: pages.length,
+    page_count: logicalPageCount(comic),
     cover_url: publicCoverUrl(base, comic),
     tags: comicTags(comic),
     layout: comic.layout || 'standard',
@@ -500,7 +530,10 @@ function sendAppComic(res, base, comic, includePages) {
   if (includePages) {
     payload.page_paths = pages;
     payload.page_urls = pages.map(page => protectedImageUrl(base, page));
-    payload.page_sizes = pageSizes(comic, pages);
+    payload.page_sizes = logicalPageSizes(comic);
+    if (isWebtoonBlocks(comic)) {
+      payload.webtoon_pages = webtoonPagesPayload(base, comic);
+    }
   }
 
   sendJson(res, 200, payload);
@@ -718,7 +751,7 @@ module.exports = async function handler(req, res) {
         comic_id: c.id,
         title: c.title,
         cover_url: publicCoverUrl(base, c),
-        pages: Array.isArray(c.pages) ? c.pages.length : 0,
+        pages: logicalPageCount(c),
       })),
     });
     return;
@@ -735,7 +768,7 @@ module.exports = async function handler(req, res) {
     sendJson(res, 200, {
       item_id: comic.id,
       name: comic.title,
-      page_count: Array.isArray(comic.pages) ? comic.pages.length : 0,
+      page_count: logicalPageCount(comic),
       views: 0,
       rate: 5.0,
       cover: publicCoverUrl(base, comic),

@@ -112,9 +112,9 @@ Modo webtoon vertical
 Nesse modo a ferramenta:
 
 1. Mantem o fluxo normal de catalogo e upload.
-2. Usa largura mais leve para caber mais altura na mesma pagina.
-3. Tenta manter cada imagem original como uma pagina unica.
-4. Divide imagens grandes demais procurando uma faixa branca perto do corte.
+2. Mantem cada imagem original como uma pagina logica do livro.
+3. Divide internamente essa pagina em blocos menores para a RW5 renderizar.
+4. O app empilha os blocos em um unico scroll, sem trocar de pagina no meio.
 5. Gera uma capa curta a partir do topo da primeira pagina.
 
 Use esse modo apenas para livros webtoon/scroll vertical. Para PDFs e
