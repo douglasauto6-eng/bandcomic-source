@@ -83,12 +83,12 @@ class BandcomicImporter(tk.Tk):
 
         ttk.Checkbutton(
             top,
-            text="Modo webtoon vertical: uma imagem por pagina quando couber, com corte inteligente",
+            text="Modo webtoon vertical: encaixa na largura da RW5 e divide imagens muito longas",
             variable=self.webtoon_mode_var,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(
             top,
-            text="Use para paginas compridas tipo 720x10000; livros comuns deixe desligado.",
+            text="Use apenas para paginas compridas tipo 720x10000; livros comuns deixe desligado.",
         ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         server = ttk.LabelFrame(root, text="Vercel Blob privado", padding=10)

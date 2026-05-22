@@ -112,10 +112,9 @@ Modo webtoon vertical
 Nesse modo a ferramenta:
 
 1. Mantem o fluxo normal de catalogo e upload.
-2. Usa largura mais leve para caber mais altura na mesma pagina.
-3. Tenta manter cada imagem original como uma pagina unica.
-4. Divide imagens grandes demais procurando uma faixa branca perto do corte.
-5. Gera uma capa curta a partir do topo da primeira pagina.
+2. Encaixa a pagina na largura real da Redmi Watch 5.
+3. Divide automaticamente imagens muito altas em partes seguras.
+4. Gera uma capa curta a partir do topo da primeira pagina.
 
 Use esse modo apenas para livros webtoon/scroll vertical. Para PDFs e
 quadrinhos comuns, deixe desligado para preservar a conversao padrao.
