@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from PIL import Image, ImageFilter
+    from PIL import Image, ImageFilter, ImageStat
 except ImportError:
     print("ERRO: instale as dependencias:")
     print("  pip install pdf2image pillow")
@@ -52,9 +52,12 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 DEFAULT_TAGS = ["PDF", "Bandcomic"]
 LAYOUT_STANDARD = "standard"
 LAYOUT_WEBTOON = "webtoon"
-WEBTOON_DEFAULT_WIDTH = 432
-WEBTOON_DEFAULT_MAX_HEIGHT = 4096
+WEBTOON_DEFAULT_WIDTH = 360
+WEBTOON_DEFAULT_MAX_HEIGHT = 7200
 WEBTOON_DEFAULT_OVERLAP = 0
+WEBTOON_MIN_SPLIT_HEIGHT = 2200
+WEBTOON_CUT_SEARCH = 1200
+WEBTOON_WHITE_THRESHOLD = 242
 
 
 @dataclass(frozen=True)
@@ -190,6 +193,39 @@ def save_webtoon_cover(source_img, out_dir, profile):
     return cover_path
 
 
+def row_white_score(gray, y, band=12):
+    y1 = max(0, y - band // 2)
+    y2 = min(gray.size[1], y1 + band)
+    if y2 <= y1:
+        return 0
+    stat = ImageStat.Stat(gray.crop((0, y1, gray.size[0], y2)))
+    return stat.mean[0]
+
+
+def find_webtoon_cut(img, top, max_height):
+    bottom_limit = min(img.size[1], top + max_height)
+    if bottom_limit >= img.size[1]:
+        return bottom_limit
+
+    search_start = max(top + WEBTOON_MIN_SPLIT_HEIGHT, bottom_limit - WEBTOON_CUT_SEARCH)
+    search_end = bottom_limit
+    if search_start >= search_end:
+        return bottom_limit
+
+    gray = img.convert("L")
+    best_y = bottom_limit
+    best_score = -1
+    for y in range(search_start, search_end, 8):
+        score = row_white_score(gray, y)
+        if score > best_score:
+            best_score = score
+            best_y = y
+
+    if best_score >= WEBTOON_WHITE_THRESHOLD:
+        return best_y
+    return bottom_limit
+
+
 def iter_vertical_slices(img, max_height, overlap=0):
     width, height = img.size
     if height <= max_height:
@@ -199,7 +235,7 @@ def iter_vertical_slices(img, max_height, overlap=0):
     overlap = max(0, min(int(overlap), max_height - 1))
     top = 0
     while top < height:
-        bottom = min(height, top + max_height)
+        bottom = find_webtoon_cut(img, top, max_height)
         yield img.crop((0, top, width, bottom))
         if bottom >= height:
             break
