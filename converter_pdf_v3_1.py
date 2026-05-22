@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-converter_pdf_v3_1.py - Converte PDFs ou pastas de imagens para o Bandcomic.
+converter_pdf_v3_1.py - Converte PDFs, CBZs ou pastas de imagens para o Bandcomic.
 
 O protocolo do Bandcomic continua igual: o script gera imagens em images/<slug>,
 cover.jpg leve (<200 px) e atualiza catalog.json. A mudanca principal desta
@@ -13,6 +13,7 @@ Perfis:
 
 Uso:
   python converter_pdf_v3_1.py meu_livro.pdf
+  python converter_pdf_v3_1.py meu_livro.cbz
   python converter_pdf_v3_1.py --profile miband9pro meu_livro.pdf
   python converter_pdf_v3_1.py --profile premium pasta_de_fotos/
   python converter_pdf_v3_1.py --max-width 900 --quality 82 pasta_com_pdfs/
@@ -26,6 +27,7 @@ import argparse
 import json
 import re
 import sys
+import zipfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
@@ -48,6 +50,7 @@ GITHUB_BRANCH = "main"
 DEFAULT_STORAGE = "blob"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+COMIC_ARCHIVE_EXTS = {".cbz"}
 DEFAULT_TAGS = ["PDF", "Bandcomic"]
 
 
@@ -94,10 +97,15 @@ DEFAULT_PROFILE = "redmi-watch5"
 
 
 def slug(name):
-    name = re.sub(r"\.(pdf|jpg|jpeg|png|webp)$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"\.(pdf|cbz|jpg|jpeg|png|webp|bmp|gif)$", "", name, flags=re.IGNORECASE)
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"[\s_-]+", "-", name).strip("-").lower()
     return name or "comic"
+
+
+def natural_sort_key(value):
+    parts = re.split(r"(\d+)", str(value).replace("\\", "/"))
+    return [(0, int(part)) if part.isdigit() else (1, part.casefold()) for part in parts]
 
 
 def normalize_tags(tags):
@@ -291,6 +299,79 @@ def process_image_folder(
     }
 
 
+def cbz_image_names(archive):
+    names = []
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        normalized = info.filename.replace("\\", "/")
+        basename = Path(normalized).name
+        if not basename or basename.startswith(".") or normalized.startswith("__MACOSX/"):
+            continue
+        if Path(normalized).suffix.lower() in IMAGE_EXTS:
+            names.append(info.filename)
+    return sorted(names, key=natural_sort_key)
+
+
+def process_cbz(
+    cbz_path,
+    comic_id,
+    profile,
+    output_dir,
+    storage,
+    github_user,
+    github_repo,
+    github_branch,
+    tags=None,
+    log=print,
+):
+    s = slug(cbz_path.name)
+    out = output_dir / s
+    out.mkdir(parents=True, exist_ok=True)
+    log(
+        f"CBZ: {cbz_path.name} -> {output_dir}/{s}/ "
+        f"({profile.page_width}px/q{profile.page_quality})"
+    )
+
+    try:
+        archive = zipfile.ZipFile(cbz_path)
+    except zipfile.BadZipFile:
+        log(f"  CBZ invalido ou corrompido: {cbz_path.name}")
+        return None
+
+    with archive:
+        imgs = cbz_image_names(archive)
+        if not imgs:
+            log(f"  sem imagens: {cbz_path.name}")
+            return None
+
+        with archive.open(imgs[0]) as raw:
+            with Image.open(raw) as first:
+                save_cover(first, out, profile)
+
+        urls = []
+        page_sizes = []
+        for i, image_name in enumerate(imgs, 1):
+            filename = f"{i:03d}.jpg"
+            dest = out / filename
+            with archive.open(image_name) as raw:
+                with Image.open(raw) as img:
+                    page_sizes.append(resize_and_save(img, dest, profile))
+            urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
+            log(f"  imagem {i}/{len(imgs)}")
+
+    title = cbz_path.stem.replace("-", " ").replace("_", " ").title()
+    log(f"  {len(imgs)} imagens processadas + cover.jpg")
+    return {
+        "id": comic_id,
+        "title": title,
+        "tags": normalize_tags(tags),
+        "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
+        "pages": urls,
+        "page_sizes": page_sizes,
+    }
+
+
 def load_catalog(catalog_path):
     if not catalog_path.exists():
         return []
@@ -361,12 +442,30 @@ def process_inputs(
                 tags,
                 log,
             )
+        elif p.is_file() and p.suffix.lower() in COMIC_ARCHIVE_EXTS:
+            entry = process_cbz(
+                p,
+                next_id,
+                profile,
+                output_dir,
+                storage,
+                github_user,
+                github_repo,
+                github_branch,
+                tags,
+                log,
+            )
         elif p.is_dir():
             has_images = any(
                 f.suffix.lower() in IMAGE_EXTS for f in p.iterdir() if f.is_file()
             )
-            has_pdfs = any(
-                f.suffix.lower() == ".pdf" for f in p.iterdir() if f.is_file()
+            archive_files = sorted(
+                [
+                    f
+                    for f in p.iterdir()
+                    if f.is_file() and (f.suffix.lower() == ".pdf" or f.suffix.lower() in COMIC_ARCHIVE_EXTS)
+                ],
+                key=natural_sort_key,
             )
 
             if has_images:
@@ -382,27 +481,41 @@ def process_inputs(
                     tags,
                     log,
                 )
-            elif has_pdfs:
-                for pdf in sorted(p.glob("*.pdf")):
-                    e = process_pdf(
-                        pdf,
-                        next_id,
-                        profile,
-                        output_dir,
-                        storage,
-                        github_user,
-                        github_repo,
-                        github_branch,
-                        tags,
-                        log,
-                    )
+            elif archive_files:
+                for archive_file in archive_files:
+                    if archive_file.suffix.lower() == ".pdf":
+                        e = process_pdf(
+                            archive_file,
+                            next_id,
+                            profile,
+                            output_dir,
+                            storage,
+                            github_user,
+                            github_repo,
+                            github_branch,
+                            tags,
+                            log,
+                        )
+                    else:
+                        e = process_cbz(
+                            archive_file,
+                            next_id,
+                            profile,
+                            output_dir,
+                            storage,
+                            github_user,
+                            github_repo,
+                            github_branch,
+                            tags,
+                            log,
+                        )
                     if e:
                         catalog, next_id = upsert_catalog_entry(catalog, e, next_id)
                         processed_entries.append(e)
                         processed += 1
                 continue
             else:
-                log(f"Pasta sem imagens ou PDFs: {arg}")
+                log(f"Pasta sem imagens, PDFs ou CBZs: {arg}")
                 continue
         else:
             log(f"Ignorando: {arg}")
@@ -452,10 +565,10 @@ def build_profile(args):
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(
-        description="Converte PDFs ou pastas de imagens para Bandcomic.",
+        description="Converte PDFs, CBZs ou pastas de imagens para Bandcomic.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("inputs", nargs="+", help="PDFs, pastas com imagens, ou pasta com PDFs")
+    parser.add_argument("inputs", nargs="+", help="PDFs, CBZs, pastas com imagens, ou pasta com PDFs/CBZs")
     parser.add_argument(
         "--profile",
         choices=sorted(PROFILES.keys()),

@@ -97,8 +97,12 @@ como ID exato.
 
 Use:
 
-- `Adicionar PDFs` para um ou varios PDFs.
-- `Adicionar pasta` para uma pasta com imagens ou uma pasta com PDFs.
+- `Adicionar PDFs/CBZ` para um ou varios PDFs ou arquivos `.cbz`.
+- `Adicionar pasta` para uma pasta com imagens, PDFs ou CBZs.
+
+Arquivos `.cbz` sao tratados como um ZIP de imagens. A ferramenta le as
+imagens internas em ordem natural, gera paginas `.jpg`, capa e `page_sizes`
+do mesmo jeito que ja faz para uma pasta de imagens comum.
 
 ## 7. Converter e publicar
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aplicativo Windows simples para importar PDFs/pastas para o Bandcomic.
+Aplicativo Windows simples para importar PDFs/CBZs/pastas para o Bandcomic.
 
 Ele usa o mesmo motor do converter_pdf_v3_1.py, gera images/<slug>/ localmente
 e publica as imagens + catalogo no Vercel Blob privado atraves do proxy /admin.
@@ -113,7 +113,7 @@ class BandcomicImporter(tk.Tk):
 
         buttons = ttk.Frame(files_box)
         buttons.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
-        ttk.Button(buttons, text="Adicionar PDFs", command=self.add_pdfs).pack(side=tk.LEFT)
+        ttk.Button(buttons, text="Adicionar PDFs/CBZ", command=self.add_pdfs).pack(side=tk.LEFT)
         ttk.Button(buttons, text="Adicionar pasta", command=self.add_folder).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(buttons, text="Limpar", command=self.clear_paths).pack(side=tk.LEFT, padx=(8, 0))
 
@@ -131,13 +131,18 @@ class BandcomicImporter(tk.Tk):
 
     def add_pdfs(self):
         selected = filedialog.askopenfilenames(
-            title="Selecione PDFs",
-            filetypes=[("PDF", "*.pdf"), ("Todos os arquivos", "*.*")],
+            title="Selecione PDFs ou CBZs",
+            filetypes=[
+                ("PDF e CBZ", "*.pdf *.cbz"),
+                ("PDF", "*.pdf"),
+                ("CBZ", "*.cbz"),
+                ("Todos os arquivos", "*.*"),
+            ],
         )
         self._add_paths(selected)
 
     def add_folder(self):
-        selected = filedialog.askdirectory(title="Selecione uma pasta com imagens ou PDFs")
+        selected = filedialog.askdirectory(title="Selecione uma pasta com imagens, PDFs ou CBZs")
         if selected:
             self._add_paths([selected])
 
@@ -169,7 +174,7 @@ class BandcomicImporter(tk.Tk):
         if self.worker and self.worker.is_alive():
             return
         if not self.paths:
-            messagebox.showwarning("Bandcomic Importer", "Adicione um PDF ou uma pasta primeiro.")
+            messagebox.showwarning("Bandcomic Importer", "Adicione um PDF, CBZ ou uma pasta primeiro.")
             return
         if self.upload_blob_var.get() and not self.admin_token_var.get().strip():
             messagebox.showwarning("Bandcomic Importer", "Informe o token do Vercel antes de publicar.")
