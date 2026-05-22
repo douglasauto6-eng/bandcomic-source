@@ -15,7 +15,6 @@ Uso:
   python converter_pdf_v3_1.py meu_livro.pdf
   python converter_pdf_v3_1.py --profile miband9pro meu_livro.pdf
   python converter_pdf_v3_1.py --profile premium pasta_de_fotos/
-  python converter_pdf_v3_1.py --layout webtoon pasta_com_paginas_longas/
   python converter_pdf_v3_1.py --max-width 900 --quality 82 pasta_com_pdfs/
 
 Requer:
@@ -50,11 +49,6 @@ DEFAULT_STORAGE = "blob"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 DEFAULT_TAGS = ["PDF", "Bandcomic"]
-LAYOUT_STANDARD = "standard"
-LAYOUT_WEBTOON = "webtoon"
-WEBTOON_DEFAULT_WIDTH = 432
-WEBTOON_DEFAULT_MAX_HEIGHT = 4096
-WEBTOON_DEFAULT_OVERLAP = 0
 
 
 @dataclass(frozen=True)
@@ -141,13 +135,6 @@ def resize_to_width(img, width):
     return img.resize((width, int(h * width / w)), Image.LANCZOS)
 
 
-def resize_to_exact_width(img, width):
-    w, h = img.size
-    if w == width:
-        return img
-    return img.resize((width, max(1, int(round(h * width / w)))), Image.LANCZOS)
-
-
 def maybe_sharpen(img, profile):
     if not profile.sharpen:
         return img
@@ -176,58 +163,6 @@ def save_cover(source_img, out_dir, profile):
     img = resize_to_width(img, profile.cover_width)
     save_jpeg(img, cover_path, profile.cover_quality)
     return cover_path
-
-
-def save_webtoon_cover(source_img, out_dir, profile):
-    """Gera uma capa curta a partir do topo de uma pagina webtoon muito vertical."""
-    cover_path = out_dir / "cover.jpg"
-    img = normalize_rgb(source_img.copy())
-    w, h = img.size
-    crop_h = min(h, max(1, int(round(w * 1.5))))
-    img = img.crop((0, 0, w, crop_h))
-    img = resize_to_exact_width(img, profile.cover_width)
-    save_jpeg(img, cover_path, profile.cover_quality)
-    return cover_path
-
-
-def iter_vertical_slices(img, max_height, overlap=0):
-    width, height = img.size
-    if height <= max_height:
-        yield img
-        return
-
-    overlap = max(0, min(int(overlap), max_height - 1))
-    top = 0
-    while top < height:
-        bottom = min(height, top + max_height)
-        yield img.crop((0, top, width, bottom))
-        if bottom >= height:
-            break
-        top = bottom - overlap
-
-
-def resize_split_and_save_webtoon(
-    source_img,
-    out_dir,
-    start_index,
-    profile,
-    width=WEBTOON_DEFAULT_WIDTH,
-    max_height=WEBTOON_DEFAULT_MAX_HEIGHT,
-    overlap=WEBTOON_DEFAULT_OVERLAP,
-):
-    img = normalize_rgb(source_img.copy())
-    img = resize_to_exact_width(img, width)
-    img = maybe_sharpen(img, profile)
-
-    saved = []
-    page_index = start_index
-    for piece in iter_vertical_slices(img, max_height, overlap):
-        filename = f"{page_index:03d}.jpg"
-        dest = out_dir / filename
-        save_jpeg(piece, dest, profile.page_quality, profile.subsampling)
-        saved.append((filename, {"width": piece.size[0], "height": piece.size[1]}))
-        page_index += 1
-    return saved
 
 
 def image_ref_for(s, filename, storage, github_user, github_repo, github_branch):
@@ -314,10 +249,6 @@ def process_image_folder(
     github_repo,
     github_branch,
     tags=None,
-    layout=LAYOUT_STANDARD,
-    webtoon_width=WEBTOON_DEFAULT_WIDTH,
-    webtoon_max_height=WEBTOON_DEFAULT_MAX_HEIGHT,
-    webtoon_overlap=WEBTOON_DEFAULT_OVERLAP,
     log=print,
 ):
     imgs = sorted(
@@ -330,54 +261,26 @@ def process_image_folder(
     s = slug(folder.name)
     out = output_dir / s
     out.mkdir(parents=True, exist_ok=True)
-    if layout == LAYOUT_WEBTOON:
-        log(
-            f"Pasta webtoon: {folder.name}/ ({len(imgs)} imagens) -> {output_dir}/{s}/ "
-            f"({webtoon_width}px/max{webtoon_max_height}px/q{profile.page_quality})"
-        )
-    else:
-        log(
-            f"Pasta: {folder.name}/ ({len(imgs)} imagens) -> {output_dir}/{s}/ "
-            f"({profile.page_width}px/q{profile.page_quality})"
-        )
+    log(
+        f"Pasta: {folder.name}/ ({len(imgs)} imagens) -> {output_dir}/{s}/ "
+        f"({profile.page_width}px/q{profile.page_quality})"
+    )
 
     with Image.open(imgs[0]) as first:
-        if layout == LAYOUT_WEBTOON:
-            save_webtoon_cover(first, out, profile)
-        else:
-            save_cover(first, out, profile)
+        save_cover(first, out, profile)
 
     urls = []
     page_sizes = []
-    next_page = 1
     for i, img_path in enumerate(imgs, 1):
-        if layout == LAYOUT_WEBTOON:
-            with Image.open(img_path) as img:
-                saved = resize_split_and_save_webtoon(
-                    img,
-                    out,
-                    next_page,
-                    profile,
-                    width=webtoon_width,
-                    max_height=webtoon_max_height,
-                    overlap=webtoon_overlap,
-                )
-            for filename, size in saved:
-                page_sizes.append(size)
-                urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
-            next_page += len(saved)
-            log(f"  imagem {i}/{len(imgs)} -> {len(saved)} parte(s)")
-        else:
-            filename = f"{i:03d}.jpg"
-            dest = out / filename
-            with Image.open(img_path) as img:
-                page_sizes.append(resize_and_save(img, dest, profile))
-            urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
-            next_page += 1
-            log(f"  imagem {i}/{len(imgs)}")
+        filename = f"{i:03d}.jpg"
+        dest = out / filename
+        with Image.open(img_path) as img:
+            page_sizes.append(resize_and_save(img, dest, profile))
+        urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
+        log(f"  imagem {i}/{len(imgs)}")
 
     title = folder.name.replace("-", " ").replace("_", " ").title()
-    log(f"  {len(urls)} pagina(s) gerada(s) de {len(imgs)} imagem(ns) + cover.jpg")
+    log(f"  {len(imgs)} imagens processadas + cover.jpg")
     return {
         "id": comic_id,
         "title": title,
@@ -385,7 +288,6 @@ def process_image_folder(
         "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
         "pages": urls,
         "page_sizes": page_sizes,
-        "layout": layout,
     }
 
 
@@ -428,10 +330,6 @@ def process_inputs(
     github_repo=GITHUB_REPO,
     github_branch=GITHUB_BRANCH,
     tags=None,
-    layout=LAYOUT_STANDARD,
-    webtoon_width=WEBTOON_DEFAULT_WIDTH,
-    webtoon_max_height=WEBTOON_DEFAULT_MAX_HEIGHT,
-    webtoon_overlap=WEBTOON_DEFAULT_OVERLAP,
     log=print,
 ):
     output_dir = Path(output_dir)
@@ -441,13 +339,6 @@ def process_inputs(
     processed = 0
     processed_entries = []
     tags = normalize_tags(tags)
-    if layout not in (LAYOUT_STANDARD, LAYOUT_WEBTOON):
-        raise RuntimeError(f"Layout invalido: {layout}")
-    if layout == LAYOUT_WEBTOON:
-        if webtoon_width < 120:
-            raise RuntimeError("Largura webtoon muito baixa; use pelo menos 120 px.")
-        if webtoon_max_height < 600:
-            raise RuntimeError("Altura maxima webtoon muito baixa; use pelo menos 600 px.")
 
     for arg in inputs:
         p = Path(arg)
@@ -489,10 +380,6 @@ def process_inputs(
                     github_repo,
                     github_branch,
                     tags,
-                    layout,
-                    webtoon_width,
-                    webtoon_max_height,
-                    webtoon_overlap,
                     log,
                 )
             elif has_pdfs:
@@ -586,30 +473,6 @@ def parse_args(argv):
     )
     parser.add_argument("--no-sharpen", action="store_true", help="Desativa nitidez pos-resize")
     parser.add_argument(
-        "--layout",
-        choices=[LAYOUT_STANDARD, LAYOUT_WEBTOON],
-        default=LAYOUT_STANDARD,
-        help="Modo de pasta de imagens: standard ou webtoon vertical",
-    )
-    parser.add_argument(
-        "--webtoon-width",
-        type=int,
-        default=WEBTOON_DEFAULT_WIDTH,
-        help="Largura final das paginas no modo webtoon",
-    )
-    parser.add_argument(
-        "--webtoon-max-height",
-        type=int,
-        default=WEBTOON_DEFAULT_MAX_HEIGHT,
-        help="Altura maxima de cada fatia no modo webtoon",
-    )
-    parser.add_argument(
-        "--webtoon-overlap",
-        type=int,
-        default=WEBTOON_DEFAULT_OVERLAP,
-        help="Sobreposicao vertical entre fatias no modo webtoon",
-    )
-    parser.add_argument(
         "--storage",
         choices=["blob", "github"],
         default=DEFAULT_STORAGE,
@@ -637,11 +500,6 @@ def main(argv=None):
         f"dpi{profile.pdf_dpi} / sharpen={'sim' if profile.sharpen else 'nao'}"
     )
     print(f"Storage: {args.storage}")
-    if args.layout == LAYOUT_WEBTOON:
-        print(
-            f"Layout webtoon: {args.webtoon_width}px de largura, "
-            f"fatias ate {args.webtoon_max_height}px"
-        )
     process_inputs(
         args.inputs,
         profile,
@@ -652,10 +510,6 @@ def main(argv=None):
         github_repo=args.github_repo,
         github_branch=args.github_branch,
         tags=args.tags,
-        layout=args.layout,
-        webtoon_width=args.webtoon_width,
-        webtoon_max_height=args.webtoon_max_height,
-        webtoon_overlap=args.webtoon_overlap,
     )
 
 

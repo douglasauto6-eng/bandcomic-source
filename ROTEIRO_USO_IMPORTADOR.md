@@ -100,25 +100,6 @@ Use:
 - `Adicionar PDFs` para um ou varios PDFs.
 - `Adicionar pasta` para uma pasta com imagens ou uma pasta com PDFs.
 
-### Modo webtoon vertical
-
-Para imagens muito compridas, como paginas 720x10000 que devem ser lidas
-rolando de cima para baixo, marque:
-
-```text
-Modo webtoon vertical
-```
-
-Nesse modo a ferramenta:
-
-1. Mantem o fluxo normal de catalogo e upload.
-2. Encaixa a pagina na largura real da Redmi Watch 5.
-3. Divide automaticamente imagens muito altas em partes seguras.
-4. Gera uma capa curta a partir do topo da primeira pagina.
-
-Use esse modo apenas para livros webtoon/scroll vertical. Para PDFs e
-quadrinhos comuns, deixe desligado para preservar a conversao padrao.
-
 ## 7. Converter e publicar
 
 Clique em:
