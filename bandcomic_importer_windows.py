@@ -248,10 +248,7 @@ class BandcomicImporter(tk.Tk):
     def _entry_refs(self, entry):
         refs = []
         seen = set()
-        all_refs = [entry.get("cover")] + list(entry.get("pages") or [])
-        for page in entry.get("webtoon_pages") or []:
-            all_refs.extend(page.get("blocks") or [])
-        for ref in all_refs:
+        for ref in [entry.get("cover")] + list(entry.get("pages") or []):
             if not ref or ref in seen:
                 continue
             if ref.startswith("http://") or ref.startswith("https://"):

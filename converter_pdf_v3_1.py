@@ -52,9 +52,8 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 DEFAULT_TAGS = ["PDF", "Bandcomic"]
 LAYOUT_STANDARD = "standard"
 LAYOUT_WEBTOON = "webtoon"
-LAYOUT_WEBTOON_BLOCKS = "webtoon-blocks"
 WEBTOON_DEFAULT_WIDTH = 360
-WEBTOON_DEFAULT_MAX_HEIGHT = 1600
+WEBTOON_DEFAULT_MAX_HEIGHT = 7200
 WEBTOON_DEFAULT_OVERLAP = 0
 WEBTOON_MIN_SPLIT_HEIGHT = 2200
 WEBTOON_CUT_SEARCH = 1200
@@ -267,42 +266,6 @@ def resize_split_and_save_webtoon(
     return saved
 
 
-def resize_and_save_webtoon_blocks(
-    source_img,
-    out_dir,
-    page_index,
-    profile,
-    s,
-    storage,
-    github_user,
-    github_repo,
-    github_branch,
-    width=WEBTOON_DEFAULT_WIDTH,
-    block_height=WEBTOON_DEFAULT_MAX_HEIGHT,
-):
-    img = normalize_rgb(source_img.copy())
-    img = resize_to_exact_width(img, width)
-    img = maybe_sharpen(img, profile)
-
-    blocks = []
-    block_sizes = []
-    block_index = 1
-    for piece in iter_vertical_slices(img, block_height, 0):
-        filename = f"{page_index:03d}_{block_index:03d}.jpg"
-        dest = out_dir / filename
-        save_jpeg(piece, dest, profile.page_quality, profile.subsampling)
-        blocks.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
-        block_sizes.append({"width": piece.size[0], "height": piece.size[1]})
-        block_index += 1
-
-    return {
-        "blocks": blocks,
-        "block_sizes": block_sizes,
-        "width": img.size[0],
-        "height": img.size[1],
-    }
-
-
 def image_ref_for(s, filename, storage, github_user, github_repo, github_branch):
     if storage == "github":
         return (
@@ -406,7 +369,7 @@ def process_image_folder(
     if layout == LAYOUT_WEBTOON:
         log(
             f"Pasta webtoon: {folder.name}/ ({len(imgs)} imagens) -> {output_dir}/{s}/ "
-            f"({webtoon_width}px/blocos{webtoon_max_height}px/q{profile.page_quality})"
+            f"({webtoon_width}px/max{webtoon_max_height}px/q{profile.page_quality})"
         )
     else:
         log(
@@ -422,30 +385,24 @@ def process_image_folder(
 
     urls = []
     page_sizes = []
-    webtoon_pages = []
     next_page = 1
     for i, img_path in enumerate(imgs, 1):
         if layout == LAYOUT_WEBTOON:
             with Image.open(img_path) as img:
-                page_info = resize_and_save_webtoon_blocks(
+                saved = resize_split_and_save_webtoon(
                     img,
                     out,
                     next_page,
                     profile,
-                    s,
-                    storage,
-                    github_user,
-                    github_repo,
-                    github_branch,
                     width=webtoon_width,
-                    block_height=webtoon_max_height,
+                    max_height=webtoon_max_height,
+                    overlap=webtoon_overlap,
                 )
-            first_block = page_info["blocks"][0] if page_info["blocks"] else ""
-            urls.append(first_block)
-            page_sizes.append({"width": page_info["width"], "height": page_info["height"]})
-            webtoon_pages.append(page_info)
-            next_page += 1
-            log(f"  imagem {i}/{len(imgs)} -> {len(page_info['blocks'])} bloco(s)")
+            for filename, size in saved:
+                page_sizes.append(size)
+                urls.append(image_ref_for(s, filename, storage, github_user, github_repo, github_branch))
+            next_page += len(saved)
+            log(f"  imagem {i}/{len(imgs)} -> {len(saved)} parte(s)")
         else:
             filename = f"{i:03d}.jpg"
             dest = out / filename
@@ -464,8 +421,7 @@ def process_image_folder(
         "cover": cover_ref_for(s, storage, github_user, github_repo, github_branch),
         "pages": urls,
         "page_sizes": page_sizes,
-        "layout": LAYOUT_WEBTOON_BLOCKS if layout == LAYOUT_WEBTOON else layout,
-        **({"webtoon_pages": webtoon_pages} if webtoon_pages else {}),
+        "layout": layout,
     }
 
 
@@ -681,7 +637,7 @@ def parse_args(argv):
         "--webtoon-max-height",
         type=int,
         default=WEBTOON_DEFAULT_MAX_HEIGHT,
-        help="Altura maxima de cada bloco interno no modo webtoon",
+        help="Altura maxima de cada fatia no modo webtoon",
     )
     parser.add_argument(
         "--webtoon-overlap",
@@ -720,7 +676,7 @@ def main(argv=None):
     if args.layout == LAYOUT_WEBTOON:
         print(
             f"Layout webtoon: {args.webtoon_width}px de largura, "
-            f"blocos ate {args.webtoon_max_height}px"
+            f"fatias ate {args.webtoon_max_height}px"
         )
     process_inputs(
         args.inputs,
