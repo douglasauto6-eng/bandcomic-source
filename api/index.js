@@ -153,10 +153,19 @@ function encodePath(path) {
   return String(path).split('/').map(encodeURIComponent).join('/');
 }
 
-function publicCoverUrl(base, cover) {
+function coverCacheKey(comic) {
+  return crypto
+    .createHash('sha1')
+    .update(`${comic?.id || ''}:${comic?.cover || ''}`)
+    .digest('hex')
+    .slice(0, 8);
+}
+
+function publicCoverUrl(base, comic) {
+  const cover = comic?.cover || '';
   if (!cover) return '';
   if (/^https?:\/\//i.test(cover)) return cover;
-  return `${base}/cover/${encodePath(cover)}`;
+  return `${base}/cover-id/${encodeURIComponent(String(comic.id))}-${coverCacheKey(comic)}.jpg`;
 }
 
 function protectedImageUrl(base, imagePath) {
@@ -226,7 +235,7 @@ function sendAppSearch(res, base, catalog, rawQuery, rawPage, rawPageSize) {
       id: c.id,
       comic_id: c.id,
       title: c.title,
-      cover_url: publicCoverUrl(base, c.cover),
+      cover_url: publicCoverUrl(base, c),
       page_count: Array.isArray(c.pages) ? c.pages.length : 0,
       pages: Array.isArray(c.pages) ? c.pages.length : 0,
       tags: comicTags(c),
@@ -482,7 +491,7 @@ function sendAppComic(res, base, comic, includePages) {
     id: comic.id,
     title: comic.title,
     page_count: pages.length,
-    cover_url: publicCoverUrl(base, comic.cover),
+    cover_url: publicCoverUrl(base, comic),
     tags: comicTags(comic),
     total_chapters: 1,
   };
@@ -650,6 +659,18 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  const coverIdMatch = pathname.match(/^\/cover-id\/(\d+)-[a-f0-9]+\.jpg$/i);
+  if (coverIdMatch) {
+    const catalog = await loadCatalog();
+    const comic = findById(catalog, coverIdMatch[1]);
+    if (!comic || !comic.cover) {
+      sendJson(res, 404, { error: 'not found' });
+      return;
+    }
+    await serveBlob(req, res, parsedUrl, comic.cover, true);
+    return;
+  }
+
   const coverMatch = pathname.match(/^\/cover\/(.+)$/);
   if (coverMatch) {
     await serveBlob(req, res, parsedUrl, decodeURIComponent(coverMatch[1]), true);
@@ -695,7 +716,7 @@ module.exports = async function handler(req, res) {
       results: slice.map(c => ({
         comic_id: c.id,
         title: c.title,
-        cover_url: publicCoverUrl(base, c.cover),
+        cover_url: publicCoverUrl(base, c),
         pages: Array.isArray(c.pages) ? c.pages.length : 0,
       })),
     });
@@ -716,7 +737,7 @@ module.exports = async function handler(req, res) {
       page_count: Array.isArray(comic.pages) ? comic.pages.length : 0,
       views: 0,
       rate: 5.0,
-      cover: publicCoverUrl(base, comic.cover),
+      cover: publicCoverUrl(base, comic),
       tags: comicTags(comic),
       total_chapters: 1,
     });

@@ -97,7 +97,7 @@ o conteudo real no Blob privado. As referencias no catalogo ficam assim:
 Na resposta do servidor, essas referencias viram:
 
 ```text
-https://bandcomic-source.vercel.app/cover/images/meu-livro/cover.jpg
+https://bandcomic-source.vercel.app/cover-id/1-a1b2c3d4.jpg
 https://bandcomic-source.vercel.app/img/_signed/.../images/meu-livro/001.jpg
 ```
 
@@ -137,6 +137,7 @@ objetiva por ID continua funcionando:
 |---|---|---|
 | `GET /config` | Publico | Configuracao da fonte Bandcomic |
 | `GET /` | Publico | Status resumido do servidor |
+| `GET /cover-id/<id>-<hash>.jpg` | Publico | Capa unica por livro, evita colisao de cache no relogio |
 | `GET /cover/<path>` | Publico | Capa via proxy Vercel |
 | `GET /search/<texto>/<pagina>` | Cookie | Busca/listagem |
 | `GET /comic/<id>` | Cookie | Detalhes do livro |
